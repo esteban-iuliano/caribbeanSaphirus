@@ -87,14 +87,19 @@ const ESTADO_CONFIG = {
 const MODO_DEMO = !APPS_SCRIPT_URL || APPS_SCRIPT_URL.includes("TU_URL");
 
 async function apiCall(accion, datos = {}) {
-  if (MODO_DEMO) return null; // se maneja en cada función
+  if (MODO_DEMO) return null;
+  // Usamos text/plain para evitar el preflight CORS que bloquea Apps Script
   const res = await fetch(APPS_SCRIPT_URL, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ accion, ...datos })
+    headers: { "Content-Type": "text/plain" },
+    body: JSON.stringify({ accion, ...datos }),
+    redirect: "follow"
   });
-  const json = await res.json();
-  if (!json.ok) throw new Error(json.error);
+  const text = await res.text();
+  let json;
+  try { json = JSON.parse(text); }
+  catch(e) { throw new Error("Respuesta inválida del servidor: " + text.substring(0,100)); }
+  if (!json.ok) throw new Error(json.error || "Error en servidor");
   return json.data;
 }
 
