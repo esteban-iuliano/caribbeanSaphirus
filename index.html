@@ -88,17 +88,14 @@ const MODO_DEMO = !APPS_SCRIPT_URL || APPS_SCRIPT_URL.includes("TU_URL");
 
 async function apiCall(accion, datos = {}) {
   if (MODO_DEMO) return null;
-  // Usamos text/plain para evitar el preflight CORS que bloquea Apps Script
-  const res = await fetch(APPS_SCRIPT_URL, {
-    method: "POST",
-    headers: { "Content-Type": "text/plain" },
-    body: JSON.stringify({ accion, ...datos }),
-    redirect: "follow"
-  });
+  // Usamos GET con datos en URL — Apps Script no tiene CORS en GET
+  const payload = encodeURIComponent(JSON.stringify({ accion, ...datos }));
+  const url = APPS_SCRIPT_URL + "?datos=" + payload;
+  const res = await fetch(url, { redirect: "follow" });
   const text = await res.text();
   let json;
   try { json = JSON.parse(text); }
-  catch(e) { throw new Error("Respuesta inválida del servidor: " + text.substring(0,100)); }
+  catch(e) { throw new Error("Respuesta inválida: " + text.substring(0,200)); }
   if (!json.ok) throw new Error(json.error || "Error en servidor");
   return json.data;
 }
@@ -574,6 +571,302 @@ function HistorialScreen({pedidos, onVerPedido}) {
   );
 }
 
+
+// ── PANTALLA: CONSOLIDADO ─────────────────────────────────────────────────────
+function ConsolidadoScreen({onBack}) {
+  const [filtro, setFiltro]       = useState("semana"); // hoy | semana | mes
+  const [datos, setDatos]         = useState(null);
+  const [cargando, setCargando]   = useState(false);
+  const [copiado, setCopiado]     = useState(false);
+  const [error, setError]         = useState(null);
+
+  // Calcular fechas según filtro
+  function calcularFechas(f) {
+    const hoy   = new Date();
+    const pad   = n => String(n).padStart(2,"0");
+    const fmt   = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+    const hasta = fmt(hoy);
+    let desde;
+    if (f === "hoy") {
+      desde = hasta;
+    } else if (f === "semana") {
+      const d = new Date(hoy); d.setDate(hoy.getDate() - 6);
+      desde = fmt(d);
+    } else { // mes
+      const d = new Date(hoy); d.setDate(1);
+      desde = fmt(d);
+    }
+    return { desde, hasta };
+  }
+
+  async function cargarConsolidado(f) {
+    setCargando(true); setError(null); setDatos(null);
+    try {
+      const { desde, hasta } = calcularFechas(f);
+      const r = await callConsolidado(desde, hasta);
+      if (!r || !r.items) throw new Error("Sin datos");
+      setDatos(r);
+    } catch(e) {
+      setError("Error al cargar: " + e.message);
+    } finally {
+      setCargando(false);
+    }
+  }
+
+  // Cargar al montar
+  React.useEffect(() => { cargarConsolidado(filtro); }, []);
+
+  const cambiarFiltro = (f) => { setFiltro(f); cargarConsolidado(f); };
+
+  // Agrupar items por producto
+  function agruparPorProducto(items) {
+    const mapa = {};
+    items.forEach(item => {
+      const prod = item.producto || "Sin producto";
+      if (!mapa[prod]) mapa[prod] = { producto: prod, total: 0, items: [] };
+      mapa[prod].items.push(item);
+      mapa[prod].total += item.cantidad;
+    });
+    return Object.values(mapa).sort((a,b) => b.total - a.total);
+  }
+
+  // Generar texto para copiar a Sheru
+  function generarTextoSheru(grupos) {
+    let txt = "PEDIDO SHERU — CaribbeanSaphirus\n";
+    txt += new Date().toLocaleDateString("es-AR") + "\n";
+    txt += "═".repeat(40) + "\n\n";
+    grupos.forEach(g => {
+      txt += `📦 ${g.producto} (${g.total} u)\n`;
+      g.items.forEach(i => {
+        const flag = i.flag !== "OK" ? ` ⚠️ ${i.flag}` : "";
+        txt += `   ${i.fragancia.padEnd(25)} ${String(i.cantidad).padStart(3)} u${flag}\n`;
+      });
+      txt += "\n";
+    });
+    txt += "═".repeat(40) + "\n";
+    txt += `TOTAL: ${grupos.reduce((s,g)=>s+g.total,0)} unidades\n`;
+    return txt;
+  }
+
+  function copiarAlPortapapeles(grupos) {
+    const txt = generarTextoSheru(grupos);
+    navigator.clipboard.writeText(txt).then(() => {
+      setCopiado(true);
+      setTimeout(() => setCopiado(false), 2500);
+    }).catch(() => {
+      // Fallback para mobile
+      const ta = document.createElement("textarea");
+      ta.value = txt;
+      document.body.appendChild(ta);
+      ta.select(); document.execCommand("copy");
+      document.body.removeChild(ta);
+      setCopiado(true);
+      setTimeout(() => setCopiado(false), 2500);
+    });
+  }
+
+  const grupos = datos?.items ? agruparPorProducto(datos.items) : [];
+  const totalGeneral = grupos.reduce((s,g) => s+g.total, 0);
+  const { desde, hasta } = calcularFechas(filtro);
+
+  const FLAG_COLORS = {
+    OK:     { bg:"#d1fae5", color:"#065f46" },
+    NUEVA:  { bg:"#ffedd5", color:"#9a3412" },
+    REVISAR:{ bg:"#fee2e2", color:"#991b1b" },
+    QUEMA:  { bg:"#ede9fe", color:"#5b21b6" },
+  };
+
+  return (
+    <div style={{padding:"0 16px 110px"}}>
+      {/* Header */}
+      <div style={{display:"flex",alignItems:"center",gap:12,padding:"24px 0 16px"}}>
+        <button onClick={onBack} style={{
+          background:"#f1f5f9",border:"none",borderRadius:10,
+          width:36,height:36,cursor:"pointer",fontSize:18,
+          display:"flex",alignItems:"center",justifyContent:"center"
+        }}>←</button>
+        <div>
+          <h1 style={{fontSize:20,fontWeight:800,color:"#0f172a",margin:0}}>Consolidado</h1>
+          <p style={{fontSize:12,color:"#94a3b8",margin:0}}>Pedido total para Sheru</p>
+        </div>
+      </div>
+
+      {/* Filtro de período */}
+      <div style={{
+        display:"flex",gap:8,marginBottom:16,
+        background:"#f1f5f9",borderRadius:12,padding:4
+      }}>
+        {[
+          {id:"hoy",   label:"Hoy"},
+          {id:"semana",label:"Esta semana"},
+          {id:"mes",   label:"Este mes"},
+        ].map(f=>(
+          <button key={f.id} onClick={()=>cambiarFiltro(f.id)} style={{
+            flex:1,padding:"9px 4px",borderRadius:10,border:"none",
+            cursor:"pointer",fontSize:12,fontWeight:700,
+            background: filtro===f.id ? "#fff" : "transparent",
+            color:       filtro===f.id ? "#1e3a5f" : "#94a3b8",
+            boxShadow:   filtro===f.id ? "0 1px 4px rgba(0,0,0,0.1)" : "none",
+            transition:  "all 0.15s",
+          }}>{f.label}</button>
+        ))}
+      </div>
+
+      {/* Rango de fechas */}
+      <div style={{
+        fontSize:11,color:"#94a3b8",fontWeight:600,
+        textAlign:"center",marginBottom:16,letterSpacing:0.5
+      }}>
+        {desde === hasta ? desde : `${desde}  →  ${hasta}`}
+      </div>
+
+      {/* Cargando */}
+      {cargando && (
+        <div style={{textAlign:"center",padding:"48px 0",color:"#94a3b8"}}>
+          <div style={{fontSize:36,marginBottom:12}}>⏳</div>
+          <p style={{fontWeight:600}}>Cargando desde Sheets...</p>
+        </div>
+      )}
+
+      {/* Error */}
+      {error && !cargando && (
+        <div style={{
+          background:"#fee2e2",border:"1.5px solid #fca5a5",borderRadius:12,
+          padding:"16px",marginBottom:16,textAlign:"center"
+        }}>
+          <div style={{fontSize:24,marginBottom:8}}>⚠️</div>
+          <p style={{color:"#991b1b",fontWeight:700,fontSize:14}}>{error}</p>
+          <button onClick={()=>cargarConsolidado(filtro)} style={{
+            marginTop:8,background:"#991b1b",color:"#fff",border:"none",
+            borderRadius:8,padding:"8px 16px",cursor:"pointer",fontWeight:700,fontSize:13
+          }}>Reintentar</button>
+        </div>
+      )}
+
+      {/* Sin datos */}
+      {!cargando && !error && datos && grupos.length === 0 && (
+        <div style={{textAlign:"center",padding:"48px 0",color:"#94a3b8"}}>
+          <div style={{fontSize:48,marginBottom:12}}>📭</div>
+          <p style={{fontWeight:700}}>Sin pedidos en este período</p>
+          <p style={{fontSize:13}}>Confirmá pedidos desde "Nuevo pedido"</p>
+        </div>
+      )}
+
+      {/* Contenido */}
+      {!cargando && grupos.length > 0 && (
+        <>
+          {/* Total general */}
+          <div style={{
+            background:"linear-gradient(135deg,#1e3a5f,#2d5986)",
+            borderRadius:16,padding:"20px",marginBottom:20,
+            display:"flex",justifyContent:"space-between",alignItems:"center",
+            color:"#fff"
+          }}>
+            <div>
+              <div style={{fontSize:11,fontWeight:700,opacity:0.7,textTransform:"uppercase",letterSpacing:1}}>
+                Total para Sheru
+              </div>
+              <div style={{fontSize:13,marginTop:4,opacity:0.85}}>
+                {grupos.length} producto{grupos.length>1?"s":""} · {datos.desde} a {datos.hasta}
+              </div>
+            </div>
+            <div style={{textAlign:"right"}}>
+              <div style={{fontSize:42,fontWeight:800,lineHeight:1}}>{totalGeneral}</div>
+              <div style={{fontSize:11,opacity:0.7,fontWeight:600}}>UNIDADES</div>
+            </div>
+          </div>
+
+          {/* Botón copiar */}
+          <button onClick={()=>copiarAlPortapapeles(grupos)} style={{
+            width:"100%",padding:"14px",borderRadius:12,border:"none",
+            background: copiado ? "#d1fae5" : "#f97316",
+            color: copiado ? "#065f46" : "#fff",
+            fontWeight:800,fontSize:15,cursor:"pointer",
+            marginBottom:20,transition:"all 0.2s",
+            fontFamily:"inherit",
+          }}>
+            {copiado ? "✅ ¡Copiado! Pegalo donde necesites" : "📋 Copiar lista para Sheru"}
+          </button>
+
+          {/* Grupos por producto */}
+          {grupos.map((grupo,gi) => (
+            <div key={gi} style={{marginBottom:20}}>
+              {/* Header del grupo */}
+              <div style={{
+                display:"flex",justifyContent:"space-between",alignItems:"center",
+                background:"#1e3a5f",color:"#fff",
+                borderRadius:"12px 12px 0 0",padding:"12px 16px",
+              }}>
+                <span style={{fontWeight:700,fontSize:14}}>
+                  📦 {grupo.producto}
+                </span>
+                <span style={{
+                  background:"rgba(255,255,255,0.2)",
+                  padding:"3px 10px",borderRadius:99,
+                  fontSize:13,fontWeight:800
+                }}>{grupo.total} u</span>
+              </div>
+
+              {/* Items del grupo */}
+              <div style={{
+                background:"#fff",borderRadius:"0 0 12px 12px",
+                boxShadow:"0 2px 8px rgba(0,0,0,0.07)",overflow:"hidden"
+              }}>
+                {grupo.items
+                  .sort((a,b)=>b.cantidad-a.cantidad)
+                  .map((item,ii) => {
+                    const fc = FLAG_COLORS[item.flag] || FLAG_COLORS.OK;
+                    const isLast = ii === grupo.items.length-1;
+                    return (
+                      <div key={ii} style={{
+                        display:"flex",alignItems:"center",
+                        padding:"11px 16px",
+                        borderBottom: isLast ? "none" : "1px solid #f1f5f9",
+                      }}>
+                        {/* Barra de proporción */}
+                        <div style={{
+                          width:3,height:28,borderRadius:2,
+                          background: item.flag==="OK" ? "#10b981" :
+                                      item.flag==="NUEVA" ? "#f97316" :
+                                      item.flag==="REVISAR" ? "#ef4444" : "#8b5cf6",
+                          marginRight:12,flexShrink:0
+                        }}/>
+
+                        {/* Nombre fragancia */}
+                        <div style={{flex:1,minWidth:0}}>
+                          <span style={{fontWeight:700,fontSize:14,color:"#0f172a"}}>
+                            {item.fragancia}
+                          </span>
+                          {item.flag !== "OK" && (
+                            <span style={{
+                              ...fc, marginLeft:8,
+                              padding:"1px 6px",borderRadius:5,
+                              fontSize:10,fontWeight:700
+                            }}>{item.flag}</span>
+                          )}
+                        </div>
+
+                        {/* Cantidad */}
+                        <div style={{
+                          fontSize:18,fontWeight:800,color:"#1e3a5f",
+                          minWidth:42,textAlign:"right"
+                        }}>{item.cantidad}</div>
+                        <div style={{
+                          fontSize:10,color:"#94a3b8",fontWeight:600,
+                          marginLeft:4
+                        }}>u</div>
+                      </div>
+                    );
+                })}
+              </div>
+            </div>
+          ))}
+        </>
+      )}
+    </div>
+  );
+}
+
 // APP PRINCIPAL
 function App() {
   const [pantalla, setPantalla] = useState("home");
@@ -606,8 +899,9 @@ function App() {
   };
 
   const navItems = [
-    {id:"home",     icon:"🏠", label:"Inicio"},
-    {id:"historial",icon:"📋", label:"Historial"},
+    {id:"home",         icon:"🏠", label:"Inicio"},
+    {id:"consolidado",  icon:"📊", label:"Sheru"},
+    {id:"historial",    icon:"📋", label:"Historial"},
   ];
 
   return (
@@ -654,6 +948,9 @@ function App() {
       )}
       {pantalla==="historial" && (
         <HistorialScreen pedidos={pedidos} onVerPedido={()=>{}}/>
+      )}
+      {pantalla==="consolidado" && (
+        <ConsolidadoScreen onBack={()=>setPantalla("home")}/>
       )}
 
       {/* Bottom Nav */}
