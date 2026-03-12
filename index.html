@@ -506,8 +506,39 @@ function ResultadoScreen({resultado, clienteOriginal, onConfirmar, onBack}) {
                   whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
                   {item.fragancia}
                 </div>
+                {(() => {
+                  const p = item.producto || "Aromatizador Textil 250ml";
+                  const cfg = {
+                    "Aromatizador Textil 250ml":   { icon:"👕", color:"#64748b", bg:"#f1f5f9" },
+                    "Aerosol Aromatizador 280cc":  { icon:"💨", color:"#2563eb", bg:"#dbeafe" },
+                    "Difusor Aromático 125ml":     { icon:"🌿", color:"#16a34a", bg:"#dcfce7" },
+                    "Difusor Premium 130ml":       { icon:"✨", color:"#9333ea", bg:"#f3e8ff" },
+                    "Mini Concentrado 60ml":       { icon:"🧴", color:"#ea580c", bg:"#ffedd5" },
+                    "Home Spray 500ml":            { icon:"🏠", color:"#0891b2", bg:"#cffafe" },
+                    "SHINY (aromatizador auto)":   { icon:"🚗", color:"#ca8a04", bg:"#fef9c3" },
+                    "Touch Saphirus + repuesto":   { icon:"🔌", color:"#db2777", bg:"#fce7f3" },
+                    "Touch repuesto":              { icon:"🔄", color:"#db2777", bg:"#fce7f3" },
+                    "Antihumedad":                 { icon:"💧", color:"#0369a1", bg:"#e0f2fe" },
+                    "Antitabaco":                  { icon:"🚭", color:"#7c3aed", bg:"#ede9fe" },
+                    "Sensaciones 8gr":             { icon:"🕯️", color:"#b45309", bg:"#fef3c7" },
+                    "Air Cool 55gr":               { icon:"❄️", color:"#0284c7", bg:"#e0f2fe" },
+                    "Route 66 (auto)":             { icon:"🚙", color:"#dc2626", bg:"#fee2e2" },
+                    "Caritas Aromáticas":          { icon:"😊", color:"#d97706", bg:"#fef3c7" },
+                  };
+                  const s = cfg[p] || { icon:"📦", color:"#3b82f6", bg:"#dbeafe" };
+                  return (
+                    <div style={{display:"inline-flex",alignItems:"center",gap:3,
+                      background:s.bg,color:s.color,borderRadius:4,
+                      padding:"1px 6px",fontSize:10,fontWeight:700,marginTop:2}}>
+                      {s.icon} {p}
+                    </div>
+                  );
+                })()}
                 {item.alias_usado && (
                   <div style={{fontSize:10,color:"#94a3b8"}}>"{item.alias_usado}"</div>
+                )}
+                {item.nota && (
+                  <div style={{fontSize:10,color:"#f59e0b",marginTop:1}}>⚠ {item.nota}</div>
                 )}
               </div>
               <div style={{display:"flex",alignItems:"center",gap:5,flexShrink:0}}>
