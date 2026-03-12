@@ -237,6 +237,63 @@ async function callGuardarAlias(alias, fraganciaCorrecta, tipo) {
   return apiCall("guardarAlias", { alias, fraganciaCorrecta, tipo });
 }
 
+// ── WHATSAPP — generador de texto ────────────────────────────────────────────
+// Agrupa ítems por producto y genera el mensaje formateado para WhatsApp.
+// No incluye precios ni total — solo fragancia y cantidad.
+function generarTextoWhatsApp(clienteNombre, items) {
+  const ICONOS = {
+    "Aromatizador Textil 250ml":  "👕",
+    "Aerosol Aromatizador 280cc": "💨",
+    "Difusor Aromático 125ml":    "🌿",
+    "Difusor Premium 130ml":      "✨",
+    "Mini Concentrado 60ml":      "🧴",
+    "Home Spray 500ml":           "🏠",
+    "SHINY (aromatizador auto)":  "🚗",
+    "Touch Saphirus + repuesto":  "🔌",
+    "Touch repuesto":             "🔄",
+    "Antihumedad":                "💧",
+    "Antitabaco":                 "🚭",
+    "Sensaciones 8gr":            "🕯️",
+    "Air Cool 55gr":              "❄️",
+    "Route 66 (auto)":            "🚙",
+    "Caritas Aromáticas":         "😊",
+  };
+
+  // Agrupar por producto
+  const grupos = {};
+  (items || []).forEach(it => {
+    const p = it.producto || "Aromatizador Textil 250ml";
+    if (!grupos[p]) grupos[p] = [];
+    grupos[p].push(it);
+  });
+
+  const fecha = new Date().toLocaleDateString("es-AR", { day:"2-digit", month:"2-digit", year:"numeric" });
+
+  let lines = [];
+  lines.push(`🌊 *Caribbean Saphirus*`);
+  lines.push(`📦 *${clienteNombre}*`);
+  lines.push(`📅 ${fecha}`);
+  lines.push(``);
+
+  Object.entries(grupos).forEach(([producto, its]) => {
+    const icono = ICONOS[producto] || "📦";
+    lines.push(`${icono} *${producto}*`);
+    its.forEach(it => {
+      lines.push(`  • ${it.fragancia} · ${it.cantidad} u`);
+    });
+    lines.push(``);
+  });
+
+  lines.push(`✅ ¡Pedido listo!`);
+
+  return lines.join("\n");
+}
+
+function abrirWhatsApp(clienteNombre, items) {
+  const texto = generarTextoWhatsApp(clienteNombre, items);
+  window.open("https://wa.me/?text=" + encodeURIComponent(texto), "_blank");
+}
+
 // ── COMPONENTES BASE ──────────────────────────────────────────────────────────
 const { useState, useEffect, useRef } = React;
 
@@ -358,8 +415,22 @@ function PedidoCard({pedido, onClick}) {
           <div style={{fontSize:10,color:"#94a3b8",fontWeight:600}}>unidades</div>
         </div>
       </div>
-      <div style={{marginTop:10,paddingTop:10,borderTop:"1px solid #f1f5f9",fontSize:11,color:"#94a3b8"}}>
-        {pedido.fecha}
+      <div style={{marginTop:10,paddingTop:10,borderTop:"1px solid #f1f5f9",
+        display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <span style={{fontSize:11,color:"#94a3b8"}}>{pedido.fecha}</span>
+        {pedido.estado === "CONFIRMADO" && pedido.items?.length > 0 && (
+          <button
+            onClick={e => { e.stopPropagation(); abrirWhatsApp(pedido.clienteNombre, pedido.items); }}
+            style={{
+              display:"flex",alignItems:"center",gap:5,
+              background:"#25D366",color:"#fff",border:"none",borderRadius:8,
+              padding:"5px 12px",fontSize:11,fontWeight:700,cursor:"pointer",
+              fontFamily:"inherit",
+            }}
+          >
+            <span>📲</span> WhatsApp
+          </button>
+        )}
       </div>
     </Card>
   );
@@ -745,6 +816,17 @@ function ResultadoScreen({resultado, clienteOriginal, onConfirmar, onBack}) {
       <h2 style={{fontSize:24,fontWeight:800,color:"#065f46",marginBottom:8}}>¡Pedido confirmado!</h2>
       <p style={{color:"#64748b",fontSize:15}}>{resultado.cliente_detectado} — {total} unidades</p>
       <p style={{color:"#94a3b8",fontSize:13,marginTop:4}}>Guardado en Google Sheets</p>
+      <button
+        onClick={() => abrirWhatsApp(resultado.cliente_detectado, items)}
+        style={{
+          marginTop:28,display:"flex",alignItems:"center",justifyContent:"center",gap:8,
+          background:"#25D366",color:"#fff",border:"none",borderRadius:14,
+          padding:"14px 28px",fontSize:16,fontWeight:700,cursor:"pointer",
+          fontFamily:"inherit",boxShadow:"0 4px 14px rgba(37,211,102,0.35)",width:"100%",
+        }}
+      >
+        <span style={{fontSize:20}}>📲</span> Enviar resumen por WhatsApp
+      </button>
     </div>
   );
 
