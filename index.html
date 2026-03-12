@@ -1258,6 +1258,34 @@ function App() {
   const [finCargando, setFinCargando] = useState(false);
   const [finPeriodo,  setFinPeriodo]  = useState('semana');
 
+  // Cargar pedidos desde Sheets al iniciar y al volver a home
+  const cargarPedidosDesdeSheets = async () => {
+    try {
+      const r = await callObtenerPedidos(false); // false = todos, no solo hoy
+      if (r?.pedidos?.length > 0) {
+        const mapped = r.pedidos
+          .filter(p => p.ID_Pedido && p.Estado === 'CONFIRMADO') // solo confirmados con ID real
+          .map(p => ({
+            id:              p.ID_Pedido || '',
+            clienteId:       p.Cliente_ID || '',
+            clienteNombre:   p.Cliente_Nombre || '',
+            estado:          p.Estado || 'CONFIRMADO',
+            totalUnidades:   parseInt(p.Total_Unidades) || 0,
+            fecha:           p.Fecha ? new Date(p.Fecha).toLocaleString('es-AR',{dateStyle:'short',timeStyle:'short'}) : '',
+            canal:           p.Canal || 'DIRECTO',
+            requiereRevision: p.Requiere_Revision === 'SÍ',
+            items:           Array.isArray(p.Items_JSON) ? p.Items_JSON : [],
+          }))
+          .sort((a,b) => b.id.localeCompare(a.id));
+        setPedidos(mapped);
+      }
+    } catch(e) {
+      console.warn('Error cargando pedidos:', e);
+    }
+  };
+
+  useEffect(() => { cargarPedidosDesdeSheets(); }, []);
+
   const handleResultado = (r, c) => {
     setResultadoActual(r); setClienteActual(c); setPantalla("resultado");
   };
@@ -1265,15 +1293,21 @@ function App() {
   const handleConfirmar = async (pf) => {
     try {
       const r = await callGuardarPedido({ ...pf, mensaje_original: pf.mensaje_original || "" });
-      setPedidos(prev=>[{
-        id: r?.id_pedido || `PED-${String(prev.length+1).padStart(3,"0")}`,
+      // Agregar inmediatamente al estado local para feedback instantáneo
+      const nuevoPedido = {
+        id: r?.id_pedido || `PED-${Date.now()}`,
         clienteId:pf.cliente_id, clienteNombre:pf.cliente_detectado,
         estado:"CONFIRMADO", totalUnidades:pf.total_unidades,
         fecha:new Date().toLocaleString("es-AR",{dateStyle:"short",timeStyle:"short"}),
         canal:clienteActual?.canal||"DIRECTO",
         requiereRevision:false, items:pf.items,
-      },...prev]);
-      setTimeout(()=>setPantalla("home"),1200);
+      };
+      setPedidos(prev=>[nuevoPedido,...prev]);
+      // Luego recargar desde Sheets para tener IDs y datos reales
+      setTimeout(async ()=>{
+        await cargarPedidosDesdeSheets();
+        setPantalla("home");
+      }, 1200);
     } catch(e) {
       alert("Error al guardar en Sheets: " + e.message);
     }
