@@ -1398,7 +1398,7 @@ async function cargarFinanzas(periodo, setFinData, setFinCargando) {
     desde = d.toISOString().split('T')[0];
   }
 
-  const url = BACKEND_URL + '?datos=' + encodeURIComponent(JSON.stringify({
+  const url = APPS_SCRIPT_URL + '?datos=' + encodeURIComponent(JSON.stringify({
     accion:'obtenerFinanzas', desde, hasta
   }));
   try {
