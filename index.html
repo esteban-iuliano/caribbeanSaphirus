@@ -380,7 +380,8 @@ function NuevoPedidoScreen({onBack, onResultado}) {
   const [imagenData,    setImagenData]    = useState(null);
   const [imagenPreview, setImagenPreview] = useState(null);
   const [imagenStatus,  setImagenStatus]  = useState("");
-  const fileInputRef = useRef(null);
+  const fileInputRef    = useRef(null);
+  const galeriaInputRef = useRef(null);
 
   // Limpiar objectURL cuando el componente se desmonta
   useEffect(() => {
@@ -524,31 +525,56 @@ function NuevoPedidoScreen({onBack, onResultado}) {
           </Card>
 
           {/* ── SECCIÓN IMAGEN ─────────────────────────────────────────────── */}
-          {/* Input file oculto — capture="environment" abre la cámara trasera en mobile */}
+          {/* Input cámara: capture="environment" fuerza cámara trasera */}
           <input
             ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            style={{display:"none"}}
+            onChange={handleImagenSelect}
+          />
+          {/* Input galería: sin capture, abre selector de archivos */}
+          <input
+            ref={galeriaInputRef}
             type="file"
             accept="image/*"
             style={{display:"none"}}
             onChange={handleImagenSelect}
           />
 
-          {/* Botón para abrir cámara / galería */}
+          {/* Botones cámara y galería */}
           {!imagenPreview && (
-            <button
-              onClick={() => fileInputRef.current.click()}
-              disabled={cargando}
-              style={{
-                width:"100%", padding:"14px", borderRadius:12,
-                border:"1.5px dashed #94a3b8", background:"#f8fafc",
-                cursor:"pointer", fontSize:15, fontWeight:700,
-                color:"#64748b", marginBottom:12,
-                display:"flex", alignItems:"center", justifyContent:"center", gap:8,
-                fontFamily:"inherit",
-              }}
-            >
-              📷 Sacar foto o cargar imagen del pedido
-            </button>
+            <div style={{display:"flex", gap:8, marginBottom:12}}>
+              <button
+                onClick={() => fileInputRef.current.click()}
+                disabled={cargando}
+                style={{
+                  flex:1, padding:"14px 8px", borderRadius:12,
+                  border:"1.5px dashed #94a3b8", background:"#f8fafc",
+                  cursor:"pointer", fontSize:14, fontWeight:700,
+                  color:"#64748b",
+                  display:"flex", alignItems:"center", justifyContent:"center", gap:6,
+                  fontFamily:"inherit",
+                }}
+              >
+                📷 Cámara
+              </button>
+              <button
+                onClick={() => galeriaInputRef.current.click()}
+                disabled={cargando}
+                style={{
+                  flex:1, padding:"14px 8px", borderRadius:12,
+                  border:"1.5px dashed #94a3b8", background:"#f8fafc",
+                  cursor:"pointer", fontSize:14, fontWeight:700,
+                  color:"#64748b",
+                  display:"flex", alignItems:"center", justifyContent:"center", gap:6,
+                  fontFamily:"inherit",
+                }}
+              >
+                🖼️ Galería
+              </button>
+            </div>
           )}
 
           {/* Preview de la imagen seleccionada */}
