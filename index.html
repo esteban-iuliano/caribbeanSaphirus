@@ -613,38 +613,22 @@ function NuevoPedidoScreen({onBack, onResultado}) {
             onChange={handleImagenSelect}
           />
 
-          {/* Botones cámara y galería */}
+          {/* Botón subir foto */}
           {!imagenPreview && (
-            <div style={{display:"flex", gap:8, marginBottom:12}}>
-              <button
-                onClick={() => fileInputRef.current.click()}
-                disabled={cargando}
-                style={{
-                  flex:1, padding:"14px 8px", borderRadius:12,
-                  border:"1.5px dashed #94a3b8", background:"#f8fafc",
-                  cursor:"pointer", fontSize:14, fontWeight:700,
-                  color:"#64748b",
-                  display:"flex", alignItems:"center", justifyContent:"center", gap:6,
-                  fontFamily:"inherit",
-                }}
-              >
-                📷 Cámara
-              </button>
-              <button
-                onClick={() => galeriaInputRef.current.click()}
-                disabled={cargando}
-                style={{
-                  flex:1, padding:"14px 8px", borderRadius:12,
-                  border:"1.5px dashed #94a3b8", background:"#f8fafc",
-                  cursor:"pointer", fontSize:14, fontWeight:700,
-                  color:"#64748b",
-                  display:"flex", alignItems:"center", justifyContent:"center", gap:6,
-                  fontFamily:"inherit",
-                }}
-              >
-                🖼️ Galería
-              </button>
-            </div>
+            <button
+              onClick={() => galeriaInputRef.current.click()}
+              disabled={cargando}
+              style={{
+                width:"100%", padding:"14px", borderRadius:12,
+                border:"1.5px dashed #94a3b8", background:"#f8fafc",
+                cursor:"pointer", fontSize:15, fontWeight:700,
+                color:"#64748b", marginBottom:12,
+                display:"flex", alignItems:"center", justifyContent:"center", gap:8,
+                fontFamily:"inherit",
+              }}
+            >
+              📷 Subir foto del pedido
+            </button>
           )}
 
           {/* Preview de la imagen seleccionada */}
@@ -911,7 +895,7 @@ function ResultadoScreen({resultado, clienteOriginal, onConfirmar, onBack}) {
               </span>
               <div style={{flex:1,minWidth:0}}>
                 {/* Fragancia: editable si es NUEVA, estática si no */}
-                {item.flag === "NUEVA" ? (
+                {(item.flag === "NUEVA" || item.flag === "REVISAR") ? (
                   <input
                     value={item.fragancia}
                     onChange={e => editarFragancia(idx, e.target.value)}
@@ -961,7 +945,7 @@ function ResultadoScreen({resultado, clienteOriginal, onConfirmar, onBack}) {
                   <div style={{fontSize:10,color:"#94a3b8"}}>"{item.alias_usado}"</div>
                 )}
                 {/* Botón guardar alias: solo visible en NUEVA cuando el operador corrigió la fragancia */}
-                {item.flag === "NUEVA" && item._aliasPendiente && (
+                {(item.flag === "NUEVA" || item.flag === "REVISAR") && item._aliasPendiente && (
                   <button
                     onClick={() => handleGuardarAlias(idx)}
                     style={{
