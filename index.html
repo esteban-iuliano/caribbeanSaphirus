@@ -1252,6 +1252,11 @@ function App() {
   const [pedidos, setPedidos]             = useState([]);
   const [resultadoActual, setResultadoActual] = useState(null);
   const [clienteActual, setClienteActual]     = useState(null);
+  const [pinInput,    setPinInput]    = useState('');
+  const [pinError,    setPinError]    = useState(false);
+  const [finData,     setFinData]     = useState(null);
+  const [finCargando, setFinCargando] = useState(false);
+  const [finPeriodo,  setFinPeriodo]  = useState('semana');
 
   const handleResultado = (r, c) => {
     setResultadoActual(r); setClienteActual(c); setPantalla("resultado");
@@ -1278,6 +1283,7 @@ function App() {
     {id:"home",        icon:"🏠", label:"Inicio"},
     {id:"consolidado", icon:"📊", label:"Sheru"},
     {id:"historial",   icon:"📋", label:"Historial"},
+    {id:"pin",         icon:"💰", label:"Finanzas"},
   ];
 
   return (
@@ -1326,8 +1332,22 @@ function App() {
       {pantalla==="consolidado" && (
         <ConsolidadoScreen onBack={()=>setPantalla("home")}/>
       )}
+      {pantalla==="pin" && (
+        <PinScreen
+          pinInput={pinInput} setPinInput={setPinInput}
+          pinError={pinError} setPinError={setPinError}
+          onSuccess={()=>{ setFinData(null); setPantalla("finanzas"); cargarFinanzas('semana', setFinData, setFinCargando); }}
+        />
+      )}
+      {pantalla==="finanzas" && (
+        <FinanzasScreen
+          data={finData} cargando={finCargando} periodo={finPeriodo}
+          onCambiarPeriodo={(p)=>{ setFinPeriodo(p); setFinData(null); cargarFinanzas(p, setFinData, setFinCargando); }}
+          onBack={()=>setPantalla("home")}
+        />
+      )}
 
-      {(pantalla==="home"||pantalla==="historial") && (
+      {(pantalla==="home"||pantalla==="historial"||pantalla==="pin"||pantalla==="finanzas") && (
         <div style={{
           position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",
           width:"100%",maxWidth:430,
@@ -1357,6 +1377,196 @@ function App() {
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+
+// ── Helper: cargar datos finanzas ────────────────────────────
+async function cargarFinanzas(periodo, setFinData, setFinCargando) {
+  setFinCargando(true);
+  const hoy = new Date();
+  let desde, hasta = hoy.toISOString().split('T')[0];
+
+  if (periodo === 'hoy') {
+    desde = hasta;
+  } else if (periodo === 'semana') {
+    const d = new Date(hoy); d.setDate(d.getDate() - 6);
+    desde = d.toISOString().split('T')[0];
+  } else if (periodo === 'mes') {
+    const d = new Date(hoy); d.setDate(1);
+    desde = d.toISOString().split('T')[0];
+  }
+
+  const url = BACKEND_URL + '?datos=' + encodeURIComponent(JSON.stringify({
+    accion:'obtenerFinanzas', desde, hasta
+  }));
+  try {
+    const res = await fetch(url);
+    const json = await res.json();
+    setFinData(json);
+  } catch(e) {
+    setFinData({ error: 'Error de conexión' });
+  } finally {
+    setFinCargando(false);
+  }
+}
+
+// ── PinScreen ──────────────────────────────────────────────
+function PinScreen({ pinInput, setPinInput, pinError, setPinError, onSuccess }) {
+  const PIN_CORRECTO = '5415';
+
+  const handleDigit = (d) => {
+    if (pinInput.length >= 4) return;
+    const nuevo = pinInput + d;
+    setPinInput(nuevo);
+    if (nuevo.length === 4) {
+      if (nuevo === PIN_CORRECTO) {
+        setPinError(false);
+        onSuccess();
+      } else {
+        setPinError(true);
+        setTimeout(() => { setPinInput(''); setPinError(false); }, 900);
+      }
+    }
+  };
+
+  const handleBorrar = () => setPinInput(p => p.slice(0,-1));
+
+  return (
+    <div style={{minHeight:"80vh",display:"flex",flexDirection:"column",
+      alignItems:"center",justifyContent:"center",padding:32}}>
+      <div style={{fontSize:40,marginBottom:8}}>💰</div>
+      <div style={{fontSize:18,fontWeight:800,color:"#0f172a",marginBottom:4}}>Finanzas</div>
+      <div style={{fontSize:13,color:"#94a3b8",marginBottom:32}}>Ingresá tu PIN para continuar</div>
+
+      {/* Puntos */}
+      <div style={{display:"flex",gap:16,marginBottom:32}}>
+        {[0,1,2,3].map(i=>(
+          <div key={i} style={{
+            width:18,height:18,borderRadius:"50%",
+            background: i < pinInput.length
+              ? (pinError ? '#ef4444' : '#16a34a')
+              : '#e2e8f0',
+            transition:"background 0.2s",
+          }}/>
+        ))}
+      </div>
+
+      {pinError && (
+        <div style={{color:"#ef4444",fontSize:13,fontWeight:700,marginBottom:12}}>
+          PIN incorrecto
+        </div>
+      )}
+
+      {/* Teclado */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,width:240}}>
+        {[1,2,3,4,5,6,7,8,9,'',0,'⌫'].map((d,i)=>(
+          <button key={i} onClick={()=> d==='' ? null : d==='⌫' ? handleBorrar() : handleDigit(String(d))}
+            style={{
+              padding:"18px 0",fontSize:20,fontWeight:700,
+              borderRadius:14,border:"1.5px solid #e2e8f0",
+              background: d==='' ? 'transparent' : '#fff',
+              cursor: d==='' ? 'default' : 'pointer',
+              color:"#0f172a",
+              boxShadow: d==='' ? 'none' : "0 1px 4px rgba(0,0,0,0.06)",
+              fontFamily:"inherit",
+            }}>
+            {d}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── FinanzasScreen ──────────────────────────────────────────
+function FinanzasScreen({ data, cargando, periodo, onCambiarPeriodo }) {
+  const fmt = (n) => n == null ? '-' : '$' + Number(n).toLocaleString('es-AR');
+  const periodos = [{id:'hoy',label:'Hoy'},{id:'semana',label:'Esta semana'},{id:'mes',label:'Este mes'}];
+
+  return (
+    <div style={{padding:"16px 16px 100px"}}>
+      <div style={{fontSize:18,fontWeight:800,color:"#0f172a",marginBottom:16}}>💰 Finanzas</div>
+
+      {/* Selector período */}
+      <div style={{display:"flex",gap:8,marginBottom:20}}>
+        {periodos.map(p=>(
+          <button key={p.id} onClick={()=>onCambiarPeriodo(p.id)} style={{
+            flex:1,padding:"8px 4px",borderRadius:10,fontSize:12,fontWeight:700,
+            border:"1.5px solid",fontFamily:"inherit",cursor:"pointer",
+            borderColor: periodo===p.id ? '#16a34a' : '#e2e8f0',
+            background:  periodo===p.id ? '#f0fdf4' : '#fff',
+            color:       periodo===p.id ? '#15803d' : '#64748b',
+          }}>{p.label}</button>
+        ))}
+      </div>
+
+      {cargando && (
+        <div style={{textAlign:"center",padding:48,color:"#94a3b8"}}>Cargando...</div>
+      )}
+
+      {!cargando && data?.error && (
+        <div style={{textAlign:"center",padding:48,color:"#ef4444"}}>{data.error}</div>
+      )}
+
+      {!cargando && data?.resumen && (() => {
+        const r = data.resumen;
+        return (
+          <>
+            {/* Cards resumen */}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:20}}>
+              {[
+                {label:"Facturado", value: fmt(r.total_venta), color:"#0ea5e9", bg:"#f0f9ff"},
+                {label:"Costo Sheru", value: fmt(r.total_costo), color:"#f97316", bg:"#fff7ed"},
+                {label:"Margen", value: fmt(r.margen), color:"#16a34a", bg:"#f0fdf4"},
+                {label:"Pedidos", value: r.pedidos_count, color:"#7c3aed", bg:"#faf5ff"},
+              ].map((c,i)=>(
+                <div key={i} style={{background:c.bg,borderRadius:14,padding:"14px 16px"}}>
+                  <div style={{fontSize:11,color:"#64748b",fontWeight:600,marginBottom:4}}>{c.label}</div>
+                  <div style={{fontSize:20,fontWeight:800,color:c.color}}>{c.value}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Por cliente */}
+            <div style={{fontWeight:800,fontSize:14,color:"#0f172a",marginBottom:10}}>Por cliente</div>
+            {data.por_cliente.length === 0
+              ? <div style={{color:"#94a3b8",fontSize:13,marginBottom:20}}>Sin datos en este período</div>
+              : data.por_cliente.map((c,i)=>(
+                <div key={i} style={{background:"#fff",borderRadius:12,padding:"12px 14px",
+                  marginBottom:8,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                    <span style={{fontWeight:700,fontSize:14,color:"#0f172a"}}>{c.nombre}</span>
+                    <span style={{fontWeight:800,fontSize:14,color:"#0ea5e9"}}>{fmt(c.venta)}</span>
+                  </div>
+                  <div style={{display:"flex",gap:16,marginTop:4}}>
+                    <span style={{fontSize:11,color:"#94a3b8"}}>Costo: {fmt(c.costo)}</span>
+                    <span style={{fontSize:11,color:"#16a34a",fontWeight:700}}>Margen: {fmt(c.margen)}</span>
+                    <span style={{fontSize:11,color:"#94a3b8"}}>{c.pedidos} ped.</span>
+                  </div>
+                </div>
+              ))
+            }
+
+            {/* Por producto */}
+            <div style={{fontWeight:800,fontSize:14,color:"#0f172a",margin:"16px 0 10px"}}>Por producto</div>
+            {data.por_producto.map((p,i)=>(
+              <div key={i} style={{background:"#fff",borderRadius:12,padding:"12px 14px",
+                marginBottom:8,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <span style={{fontWeight:700,fontSize:13,color:"#0f172a"}}>{p.producto}</span>
+                  <span style={{fontWeight:800,fontSize:13,color:"#0ea5e9"}}>{fmt(p.venta)}</span>
+                </div>
+                <div style={{display:"flex",gap:16,marginTop:4}}>
+                  <span style={{fontSize:11,color:"#94a3b8"}}>{p.cantidad} u.</span>
+                  <span style={{fontSize:11,color:"#16a34a",fontWeight:700}}>Margen: {fmt(p.margen)}</span>
+                </div>
+              </div>
+            ))}
+          </>
+        );
+      })()}
     </div>
   );
 }
