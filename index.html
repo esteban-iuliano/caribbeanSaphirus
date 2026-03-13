@@ -257,12 +257,19 @@ function generarTextoWhatsApp(clienteNombre, items) {
   lines.push(`📦 *${clienteNombre}*`);
   lines.push(`📅 ${fecha}`);
   lines.push(``);
+
+  let totalGeneral = 0;
+
   Object.entries(grupos).forEach(([producto, its]) => {
     const icono = ICONOS[producto] || "📦";
-    lines.push(`${icono} *${producto}*`);
+    const totalProducto = its.reduce((s, it) => s + (parseInt(it.cantidad) || 0), 0);
+    totalGeneral += totalProducto;
+    lines.push(`${icono} *${producto}* — ${totalProducto} u`);
     its.forEach(it => { lines.push(`  • ${it.fragancia} · ${it.cantidad} u`); });
     lines.push(``);
   });
+
+  lines.push(`📊 *Total: ${totalGeneral} unidades*`);
   lines.push(`✅ ¡Pedido listo!`);
   return lines.join("\n");
 }
