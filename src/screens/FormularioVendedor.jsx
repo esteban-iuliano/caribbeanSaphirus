@@ -33,6 +33,10 @@ export default function FormularioVendedor() {
   const [cantidad,     setCantidad]     = useState(1);
   const [fragListOpen, setFragListOpen] = useState(false);
 
+  // ¿El producto seleccionado tiene fragancia?
+  const productoActual   = productos.find(p => p.nombre === productoSel);
+  const tieneFragancia   = productoActual ? productoActual.tiene_fragancia !== false : true;
+
   // ─── Paso 1: seleccionar cliente ─────────────────────────────
   const clientesFiltrados = useMemo(() =>
     clientes.filter(c =>
@@ -62,10 +66,14 @@ export default function FormularioVendedor() {
   };
 
   const agregarItem = () => {
-    if (!productoSel || !fragSel || cantidad < 1) return;
+    if (!productoSel || cantidad < 1) return;
+    if (tieneFragancia && !fragSel) return;
+
+    const fragancia = tieneFragancia ? fragSel : '—';
+
     // Si ya existe el mismo producto+fragancia, sumar cantidad
     const existe = items.findIndex(
-      it => it.producto === productoSel && it.fragancia === fragSel
+      it => it.producto === productoSel && it.fragancia === fragancia
     );
     if (existe >= 0) {
       setItems(prev => prev.map((it, i) =>
@@ -73,7 +81,7 @@ export default function FormularioVendedor() {
       ));
     } else {
       setItems(prev => [...prev, {
-        fragancia:   fragSel,
+        fragancia,
         producto:    productoSel,
         cantidad,
         flag:        'OK',
@@ -81,7 +89,6 @@ export default function FormularioVendedor() {
         nota:        '',
       }]);
     }
-    // Limpiar selector de ítem, mantener producto seleccionado
     setFragSel('');
     setBusqFrag('');
     setCantidad(1);
@@ -115,7 +122,8 @@ export default function FormularioVendedor() {
   };
 
   const totalUnidades = items.reduce((s, it) => s + it.cantidad, 0);
-  const puedeAgregar  = productoSel && fragSel && cantidad >= 1;
+  // Puede agregar: producto elegido + (fragancia elegida O producto sin fragancia) + cantidad válida
+  const puedeAgregar  = productoSel && (tieneFragancia ? fragSel : true) && cantidad >= 1;
   const puedeContinuar = items.length > 0;
 
   // ─── Pantallas especiales ─────────────────────────────────────
@@ -206,7 +214,12 @@ export default function FormularioVendedor() {
               <label className="text-xs text-slate-500">Producto</label>
               <select
                 value={productoSel}
-                onChange={e => { setProductoSel(e.target.value); setFragSel(''); setBusqFrag(''); }}
+                onChange={e => {
+                  setProductoSel(e.target.value);
+                  setFragSel('');
+                  setBusqFrag('');
+                  setFragListOpen(false);
+                }}
                 className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white"
               >
                 <option value="">— Seleccioná un producto —</option>
@@ -216,7 +229,8 @@ export default function FormularioVendedor() {
               </select>
             </div>
 
-            {/* Fragancia — buscador + lista */}
+            {/* Fragancia — solo si el producto la tiene */}
+            {tieneFragancia && (
             <div className="space-y-1">
               <label className="text-xs text-slate-500">Fragancia</label>
               <div className="relative">
@@ -253,6 +267,7 @@ export default function FormularioVendedor() {
                 </div>
               )}
             </div>
+            )}
 
             {/* Cantidad */}
             <div className="space-y-1">
