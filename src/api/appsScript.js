@@ -42,10 +42,10 @@ function normalizeDate(val) {
   if (!val) return null;
   const s = val.toString().trim();
   if (!s) return null;
-  // Ya está en formato correcto "yyyy-mm-dd ..."
-  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s;
-  // Intentar parsear otros formatos
-  const d = new Date(s);
+  // Convertir "yyyy-mm-dd HH:MM:SS" (con espacio) a ISO con T
+  // para que new Date() lo parsee correctamente en todos los browsers
+  const iso = s.replace(' ', 'T');
+  const d = new Date(iso);
   if (isNaN(d.getTime())) return null;
   const y   = d.getFullYear();
   const mo  = String(d.getMonth() + 1).padStart(2, '0');
