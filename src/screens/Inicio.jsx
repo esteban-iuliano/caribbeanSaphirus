@@ -7,27 +7,48 @@ import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext.jsx';
 import { obtenerPedidos } from '../api/appsScript.js';
 import Loader from '../components/ui/Loader.jsx';
-import { formatDate } from '../utils/formatters.js';
+
+// Convierte cualquier formato de fecha a "yyyy-mm-dd" en hora local
+function toLocalDateStr(val) {
+  if (!val) return '';
+  const d = new Date(val);
+  if (isNaN(d)) return val.toString().substring(0, 10);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function hoyStr() {
+  return toLocalDateStr(new Date());
+}
 
 export default function Inicio() {
   const { state } = useApp();
   const navigate  = useNavigate();
-  const [pedidos, setPedidos] = useState([]);
+  const [pedidos, setPedidos]             = useState([]);
   const [loadingPedidos, setLoadingPedidos] = useState(true);
+  const [errorPedidos, setErrorPedidos]   = useState(null);
 
   useEffect(() => {
+    const timeout = setTimeout(() => {
+      setLoadingPedidos(false);
+      setErrorPedidos('El servidor tardó demasiado. Reintentá más tarde.');
+    }, 15000); // 15 segundos máximo
+
     obtenerPedidos()
       .then(res => setPedidos(res?.datos ?? []))
-      .catch(() => setPedidos([]))
-      .finally(() => setLoadingPedidos(false));
+      .catch(e  => setErrorPedidos(e.message))
+      .finally(() => { clearTimeout(timeout); setLoadingPedidos(false); });
+
+    return () => clearTimeout(timeout);
   }, []);
 
-  const hoy = new Date().toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' });
-  const pedidosHoy = pedidos.filter(p => {
-    const d = new Date(p.fecha);
-    const n = new Date();
-    return d.toDateString() === n.toDateString();
+  const hoy = new Date().toLocaleDateString('es-AR', {
+    weekday: 'long', day: 'numeric', month: 'long',
   });
+
+  const pedidosHoy = pedidos.filter(p => toLocalDateStr(p.fecha) === hoyStr());
 
   return (
     <div className="p-4 space-y-4">
@@ -59,16 +80,21 @@ export default function Inicio() {
       {/* Resumen del día */}
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
         <h2 className="font-semibold text-slate-700 mb-3">Pedidos de hoy</h2>
+
         {loadingPedidos ? (
           <Loader message="Cargando pedidos…" />
+        ) : errorPedidos ? (
+          <p className="text-red-400 text-sm text-center py-4">{errorPedidos}</p>
         ) : pedidosHoy.length === 0 ? (
           <p className="text-slate-400 text-sm text-center py-4">Sin pedidos por hoy</p>
         ) : (
           <ul className="space-y-2">
             {pedidosHoy.map((p, i) => (
               <li key={i} className="flex items-center justify-between text-sm">
-                <span className="font-medium text-slate-700">{p.clienteNombre ?? p.clienteId}</span>
-                <span className="text-slate-400">{p.totalItems} items · {formatDate(p.fecha)}</span>
+                <span className="font-medium text-slate-700">
+                  {p.clienteNombre || p.clienteId}
+                </span>
+                <span className="text-slate-400">{p.totalItems} u.</span>
               </li>
             ))}
           </ul>
