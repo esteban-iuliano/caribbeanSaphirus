@@ -1,13 +1,7 @@
 /**
- * appsScript.js — v1.1
+ * appsScript.js — v1.2
  * Capa de acceso al backend Google Apps Script.
- *
- * Responsabilidad: normalizar TODAS las respuestas del backend
- * para que los screens siempre reciban { datos: [...] }
- *
- * CORS strategy:
- *  - GET  con ?datos=encodeURIComponent(JSON.stringify(payload))
- *  - POST con Content-Type: text/plain (imágenes)
+ * Normaliza TODAS las respuestas → { datos: [...] } para los screens.
  */
 
 const BASE_URL =
@@ -20,7 +14,6 @@ async function apiGet(payload) {
   const res = await fetch(`${BASE_URL}?datos=${params}`);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const json = await res.json();
-  // Backend envuelve todo en { ok: true, data: { ... } }
   if (json?.ok === false) throw new Error(json.error || 'Error del servidor');
   return json?.data ?? json;
 }
@@ -35,6 +28,31 @@ async function apiPost(payload) {
   const json = await res.json();
   if (json?.ok === false) throw new Error(json.error || 'Error del servidor');
   return json?.data ?? json;
+}
+
+/**
+ * Normaliza cualquier formato de fecha a string "yyyy-mm-dd HH:MM".
+ * Apps Script puede devolver:
+ *   - "2026-03-14 11:30:00"  (Utilities.formatDate)
+ *   - "Sat Mar 14 2026 ..."  (Date.toString serializado)
+ *   - ""  (vacío)
+ * Siempre devuelve string o null.
+ */
+function normalizeDate(val) {
+  if (!val) return null;
+  const s = val.toString().trim();
+  if (!s) return null;
+  // Ya está en formato correcto "yyyy-mm-dd ..."
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s;
+  // Intentar parsear otros formatos
+  const d = new Date(s);
+  if (isNaN(d.getTime())) return null;
+  const y   = d.getFullYear();
+  const mo  = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  const h   = String(d.getHours()).padStart(2, '0');
+  const mi  = String(d.getMinutes()).padStart(2, '0');
+  return `${y}-${mo}-${day} ${h}:${mi}`;
 }
 
 // ─── Compresión de imágenes ──────────────────────────────────────────────────
@@ -66,15 +84,14 @@ export function compressImage(file, maxWidth = 1024, quality = 0.7) {
 
 // ─── Endpoints públicos ──────────────────────────────────────────────────────
 
-/** Verifica que el backend esté activo. */
 export async function ping() {
   return apiGet({ accion: 'ping' });
 }
 
 /**
  * Obtiene todos los clientes activos.
- * Backend devuelve: { clientes: [...] }
- * Frontend espera:  { datos: [...] }
+ * Backend → { clientes: [...] }
+ * Frontend ← { datos: [...] }
  */
 export async function obtenerClientes() {
   const res = await apiGet({ accion: 'obtenerClientes' });
@@ -83,7 +100,6 @@ export async function obtenerClientes() {
 
 /**
  * Parsea un pedido de texto libre.
- * Backend espera campo "mensaje" (no "texto").
  */
 export async function parsearPedido(clienteId, texto) {
   const res = await apiGet({ accion: 'parsearPedido', mensaje: texto, clienteId });
@@ -105,7 +121,6 @@ export async function parsearImagen(clienteId, imagenBase64) {
 
 /**
  * Guarda un pedido confirmado.
- * Backend espera body.pedido con estructura específica.
  */
 export async function guardarPedido(clienteId, items, nota = '') {
   const totalUnidades = items.reduce((s, it) => s + (it.cantidad ?? 0), 0);
@@ -123,26 +138,31 @@ export async function guardarPedido(clienteId, items, nota = '') {
 
 /**
  * Obtiene el historial de pedidos.
- * Backend devuelve: { pedidos: [...] }
- * Frontend espera:  { datos: [...] }
+ * Backend → { pedidos: [...] }   (claves con mayúscula: Fecha, Cliente_Nombre, etc.)
+ * Frontend ← { datos: [...] }    (claves normalizadas en minúscula)
  */
 export async function obtenerPedidos() {
   const res = await apiGet({ accion: 'obtenerPedidos' });
   const pedidos = (res?.pedidos ?? []).map(p => ({
-    clienteId:     p.Cliente_ID      ?? '',
-    clienteNombre: p.Cliente_Nombre  ?? '',
-    fecha:         p.Fecha           ?? '',
-    totalItems:    p.Total_Unidades  ?? 0,
-    estado:        p.Estado          ?? '',
-    items:         p.Items_JSON      ?? [],
+    clienteId:     p.Cliente_ID      ?? p.cliente_id     ?? '',
+    clienteNombre: p.Cliente_Nombre  ?? p.cliente_nombre ?? '',
+    fecha:         normalizeDate(p.Fecha ?? p.fecha),
+    totalItems:    Number(p.Total_Unidades ?? p.total_unidades ?? 0),
+    estado:        p.Estado          ?? p.estado         ?? '',
+    items:         (() => {
+      try {
+        const raw = p.Items_JSON ?? p.items ?? [];
+        return typeof raw === 'string' ? JSON.parse(raw) : raw;
+      } catch { return []; }
+    })(),
   }));
   return { datos: pedidos };
 }
 
 /**
  * Obtiene el consolidado de Sheru.
- * Backend devuelve: { items: [...] }
- * Frontend espera:  { datos: [...] }
+ * Backend → { items: [...] }
+ * Frontend ← { datos: [...] }
  */
 export async function obtenerConsolidado() {
   const res = await apiGet({ accion: 'obtenerConsolidado' });
