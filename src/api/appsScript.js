@@ -1,7 +1,8 @@
 /**
- * appsScript.js — v1.2
+ * appsScript.js — v1.3
  * Capa de acceso al backend Google Apps Script.
  * Normaliza TODAS las respuestas → { datos: [...] } para los screens.
+ * v1.3: agrega obtenerCatalogo, origen en guardarPedido
  */
 
 const BASE_URL =
@@ -30,20 +31,10 @@ async function apiPost(payload) {
   return json?.data ?? json;
 }
 
-/**
- * Normaliza cualquier formato de fecha a string "yyyy-mm-dd HH:MM".
- * Apps Script puede devolver:
- *   - "2026-03-14 11:30:00"  (Utilities.formatDate)
- *   - "Sat Mar 14 2026 ..."  (Date.toString serializado)
- *   - ""  (vacío)
- * Siempre devuelve string o null.
- */
 function normalizeDate(val) {
   if (!val) return null;
   const s = val.toString().trim();
   if (!s) return null;
-  // Convertir "yyyy-mm-dd HH:MM:SS" (con espacio) a ISO con T
-  // para que new Date() lo parsee correctamente en todos los browsers
   const iso = s.replace(' ', 'T');
   const d = new Date(iso);
   if (isNaN(d.getTime())) return null;
@@ -90,12 +81,26 @@ export async function ping() {
 
 /**
  * Obtiene todos los clientes activos.
- * Backend → { clientes: [...] }
- * Frontend ← { datos: [...] }
+ * Acepta canal opcional para filtrar (ej: 'CHINOS').
  */
-export async function obtenerClientes() {
-  const res = await apiGet({ accion: 'obtenerClientes' });
+export async function obtenerClientes(canal) {
+  const payload = { accion: 'obtenerClientes' };
+  if (canal) payload.canal = canal;
+  const res = await apiGet(payload);
   return { datos: res?.clientes ?? [] };
+}
+
+/**
+ * Obtiene catálogo completo para el formulario de vendedor:
+ * clientes filtrados por canal, productos y fragancias por tipo.
+ */
+export async function obtenerCatalogo(canal = 'CHINOS') {
+  const res = await apiGet({ accion: 'obtenerCatalogo', canal });
+  return {
+    clientes:   res?.clientes   ?? [],
+    productos:  res?.productos  ?? [],
+    fragancias: res?.fragancias ?? {},
+  };
 }
 
 /**
@@ -121,8 +126,9 @@ export async function parsearImagen(clienteId, imagenBase64) {
 
 /**
  * Guarda un pedido confirmado.
+ * origen: 'PWA' (parser) | 'formulario' (FormularioVendedor)
  */
-export async function guardarPedido(clienteId, items, nota = '') {
+export async function guardarPedido(clienteId, items, nota = '', origen = 'PWA') {
   const totalUnidades = items.reduce((s, it) => s + (it.cantidad ?? 0), 0);
   return apiGet({
     accion: 'guardarPedido',
@@ -132,14 +138,13 @@ export async function guardarPedido(clienteId, items, nota = '') {
       total_unidades:   totalUnidades,
       notas_pedido:     nota,
       mensaje_original: '',
+      origen,
     },
   });
 }
 
 /**
  * Obtiene el historial de pedidos.
- * Backend → { pedidos: [...] }   (claves con mayúscula: Fecha, Cliente_Nombre, etc.)
- * Frontend ← { datos: [...] }    (claves normalizadas en minúscula)
  */
 export async function obtenerPedidos() {
   const res = await apiGet({ accion: 'obtenerPedidos' });
@@ -161,8 +166,6 @@ export async function obtenerPedidos() {
 
 /**
  * Obtiene el consolidado de Sheru.
- * Backend → { items: [...] }
- * Frontend ← { datos: [...] }
  */
 export async function obtenerConsolidado() {
   const res = await apiGet({ accion: 'obtenerConsolidado' });

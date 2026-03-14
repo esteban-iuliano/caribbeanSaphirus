@@ -3,6 +3,7 @@ import { NavLink } from 'react-router-dom';
 const NAV_ITEMS = [
   { to: '/',            icon: '🏠', label: 'Inicio' },
   { to: '/nuevo',       icon: '➕', label: 'Nuevo' },
+  { to: '/formulario',  icon: '📝', label: 'Formulario' },
   { to: '/consolidado', icon: '📋', label: 'Sheru' },
   { to: '/historial',   icon: '📂', label: 'Historial' },
 ];
@@ -10,7 +11,7 @@ const NAV_ITEMS = [
 export default function BottomNav() {
   return (
     <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-white border-t border-slate-200 z-20 bottom-nav-height">
-      <ul className="grid grid-cols-4 h-16">
+      <ul className="grid grid-cols-5 h-16">
         {NAV_ITEMS.map(({ to, icon, label }) => (
           <li key={to}>
             <NavLink

@@ -6,6 +6,7 @@ import NuevoPedido from './screens/NuevoPedido.jsx';
 import Resultado from './screens/Resultado.jsx';
 import Consolidado from './screens/Consolidado.jsx';
 import Historial from './screens/Historial.jsx';
+import FormularioVendedor from './screens/FormularioVendedor.jsx';
 
 export default function App() {
   return (
@@ -19,6 +20,7 @@ export default function App() {
           <Route path="/resultado"   element={<Resultado />} />
           <Route path="/consolidado" element={<Consolidado />} />
           <Route path="/historial"   element={<Historial />} />
+          <Route path="/formulario"  element={<FormularioVendedor />} />
           {/* fallback */}
           <Route path="*"            element={<Navigate to="/" replace />} />
         </Routes>
