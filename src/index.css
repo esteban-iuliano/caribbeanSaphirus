@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  html, body, #root {
+    @apply h-full;
+    overscroll-behavior: none;
+  }
+
+  body {
+    @apply bg-slate-50 text-slate-900 antialiased;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+@layer utilities {
+  .pb-safe {
+    padding-bottom: calc(4rem + var(--safe-bottom));
+  }
+  .bottom-nav-height {
+    height: calc(4rem + var(--safe-bottom));
+  }
+}
