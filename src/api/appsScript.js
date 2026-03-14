@@ -1,10 +1,13 @@
 /**
- * appsScript.js
+ * appsScript.js — v1.1
  * Capa de acceso al backend Google Apps Script.
  *
+ * Responsabilidad: normalizar TODAS las respuestas del backend
+ * para que los screens siempre reciban { datos: [...] }
+ *
  * CORS strategy:
- *  - GET  con ?datos=encodeURIComponent(JSON.stringify(payload)) para evitar preflight.
- *  - POST con Content-Type: text/plain para imágenes (evita preflight).
+ *  - GET  con ?datos=encodeURIComponent(JSON.stringify(payload))
+ *  - POST con Content-Type: text/plain (imágenes)
  */
 
 const BASE_URL =
@@ -16,7 +19,10 @@ async function apiGet(payload) {
   const params = encodeURIComponent(JSON.stringify(payload));
   const res = await fetch(`${BASE_URL}?datos=${params}`);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
+  const json = await res.json();
+  // Backend envuelve todo en { ok: true, data: { ... } }
+  if (json?.ok === false) throw new Error(json.error || 'Error del servidor');
+  return json?.data ?? json;
 }
 
 async function apiPost(payload) {
@@ -26,23 +32,17 @@ async function apiPost(payload) {
     body: JSON.stringify(payload),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
+  const json = await res.json();
+  if (json?.ok === false) throw new Error(json.error || 'Error del servidor');
+  return json?.data ?? json;
 }
 
 // ─── Compresión de imágenes ──────────────────────────────────────────────────
 
-/**
- * Comprime un File de imagen a base64 JPEG.
- * @param {File} file
- * @param {number} maxWidth  px máximos de ancho (default 1024)
- * @param {number} quality   0-1 JPEG quality (default 0.7)
- * @returns {Promise<string>} base64 sin prefijo data:
- */
 export function compressImage(file, maxWidth = 1024, quality = 0.7) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     const objectUrl = URL.createObjectURL(file);
-
     img.onload = () => {
       let { width, height } = img;
       if (width > maxWidth) {
@@ -54,15 +54,12 @@ export function compressImage(file, maxWidth = 1024, quality = 0.7) {
       canvas.height = height;
       canvas.getContext('2d').drawImage(img, 0, 0, width, height);
       URL.revokeObjectURL(objectUrl);
-      const dataUrl = canvas.toDataURL('image/jpeg', quality);
-      resolve(dataUrl.split(',')[1]); // solo base64
+      resolve(canvas.toDataURL('image/jpeg', quality).split(',')[1]);
     };
-
     img.onerror = () => {
       URL.revokeObjectURL(objectUrl);
       reject(new Error('No se pudo cargar la imagen'));
     };
-
     img.src = objectUrl;
   });
 }
@@ -74,47 +71,80 @@ export async function ping() {
   return apiGet({ accion: 'ping' });
 }
 
-/** Obtiene todos los clientes (CLI-001 … CLI-029). */
+/**
+ * Obtiene todos los clientes activos.
+ * Backend devuelve: { clientes: [...] }
+ * Frontend espera:  { datos: [...] }
+ */
 export async function obtenerClientes() {
-  return apiGet({ accion: 'obtenerClientes' });
+  const res = await apiGet({ accion: 'obtenerClientes' });
+  return { datos: res?.clientes ?? [] };
 }
 
 /**
  * Parsea un pedido de texto libre.
- * @param {string} clienteId  ej. "CLI-017"
- * @param {string} texto      texto libre del WhatsApp
+ * Backend espera campo "mensaje" (no "texto").
  */
 export async function parsearPedido(clienteId, texto) {
-  return apiGet({ accion: 'parsearPedido', clienteId, texto });
+  const res = await apiGet({ accion: 'parsearPedido', mensaje: texto, clienteId });
+  return { items: res?.items ?? [] };
 }
 
 /**
  * Parsea un pedido desde imagen.
- * @param {string} clienteId
- * @param {string} imagenBase64  imagen comprimida en base64
  */
 export async function parsearImagen(clienteId, imagenBase64) {
-  return apiPost({ accion: 'parsearImagen', clienteId, imagen: imagenBase64 });
+  const res = await apiPost({
+    accion:      'parsearImagen',
+    imageBase64: imagenBase64,
+    mimeType:    'image/jpeg',
+    clienteId,
+  });
+  return { items: res?.items ?? [] };
 }
 
 /**
- * Guarda un pedido confirmado en CS_Pedidos / CS_Items.
- * @param {string} clienteId
- * @param {Array}  items     array de {fragancia, cantidad, producto, flag, ...}
- * @param {string} [nota]    nota opcional del pedido
+ * Guarda un pedido confirmado.
+ * Backend espera body.pedido con estructura específica.
  */
 export async function guardarPedido(clienteId, items, nota = '') {
-  return apiGet({ accion: 'guardarPedido', clienteId, items: JSON.stringify(items), nota });
-}
-
-/** Obtiene el historial de pedidos. */
-export async function obtenerPedidos() {
-  return apiGet({ accion: 'obtenerPedidos' });
+  const totalUnidades = items.reduce((s, it) => s + (it.cantidad ?? 0), 0);
+  return apiGet({
+    accion: 'guardarPedido',
+    pedido: {
+      cliente_id:       clienteId,
+      items,
+      total_unidades:   totalUnidades,
+      notas_pedido:     nota,
+      mensaje_original: '',
+    },
+  });
 }
 
 /**
- * Obtiene el consolidado de Sheru (todos los items pendientes agrupados).
+ * Obtiene el historial de pedidos.
+ * Backend devuelve: { pedidos: [...] }
+ * Frontend espera:  { datos: [...] }
+ */
+export async function obtenerPedidos() {
+  const res = await apiGet({ accion: 'obtenerPedidos' });
+  const pedidos = (res?.pedidos ?? []).map(p => ({
+    clienteId:     p.Cliente_ID      ?? '',
+    clienteNombre: p.Cliente_Nombre  ?? '',
+    fecha:         p.Fecha           ?? '',
+    totalItems:    p.Total_Unidades  ?? 0,
+    estado:        p.Estado          ?? '',
+    items:         p.Items_JSON      ?? [],
+  }));
+  return { datos: pedidos };
+}
+
+/**
+ * Obtiene el consolidado de Sheru.
+ * Backend devuelve: { items: [...] }
+ * Frontend espera:  { datos: [...] }
  */
 export async function obtenerConsolidado() {
-  return apiGet({ accion: 'obtenerConsolidado' });
+  const res = await apiGet({ accion: 'obtenerConsolidado' });
+  return { datos: res?.items ?? [] };
 }
