@@ -1,8 +1,9 @@
 /**
- * appsScript.js — v1.3
+ * appsScript.js — v1.4
  * Capa de acceso al backend Google Apps Script.
  * Normaliza TODAS las respuestas → { datos: [...] } para los screens.
  * v1.3: agrega obtenerCatalogo, origen en guardarPedido
+ * v1.4: agrega pedidoId en obtenerPedidos + Sprint C' (obtenerPedidoDetalle, editarPedido, eliminarPedidoAdmin)
  */
 
 const BASE_URL =
@@ -145,15 +146,23 @@ export async function guardarPedido(clienteId, items, nota = '', origen = 'PWA')
 
 /**
  * Obtiene el historial de pedidos.
+ * v1.4: agrega pedidoId al objeto normalizado.
  */
 export async function obtenerPedidos() {
   const res = await apiGet({ accion: 'obtenerPedidos' });
   const pedidos = (res?.pedidos ?? []).map(p => ({
+    pedidoId:      p.ID_Pedido       ?? p.Pedido_ID      ?? p.id_pedido      ?? '',  // ← v1.4
     clienteId:     p.Cliente_ID      ?? p.cliente_id     ?? '',
     clienteNombre: p.Cliente_Nombre  ?? p.cliente_nombre ?? '',
+    canal:         p.Canal           ?? p.canal          ?? '',
+    vendedor:      p.Vendedor        ?? p.vendedor        ?? '',
     fecha:         normalizeDate(p.Fecha ?? p.fecha),
     totalItems:    Number(p.Total_Unidades ?? p.total_unidades ?? 0),
     estado:        p.Estado          ?? p.estado         ?? '',
+    estadoPago:    p.estado_pago     ?? 'PENDIENTE',
+    totalSheru:    Number(p.total_sheru   ?? 0),
+    totalCliente:  Number(p.total_cliente ?? 0),
+    editadoPor:    p.editado_por     ?? '',
     items:         (() => {
       try {
         const raw = p.Items_JSON ?? p.items ?? [];
@@ -170,4 +179,45 @@ export async function obtenerPedidos() {
 export async function obtenerConsolidado() {
   const res = await apiGet({ accion: 'obtenerConsolidado' });
   return { datos: res?.items ?? [] };
+}
+
+// ─── Sprint C' — Edición y eliminación de pedidos (ADMIN) ───────────────────
+
+/**
+ * Obtiene cabecera + ítems de un pedido específico.
+ * Solo ADMIN.
+ */
+export async function obtenerPedidoDetalle(pedidoId, email) {
+  const res = await apiGet({ accion: 'obtenerPedidoDetalle', pedidoId, email });
+  // res = { pedido: {...}, items: [...] }
+  return {
+    pedido: res?.pedido ?? null,
+    items:  res?.items  ?? [],
+  };
+}
+
+/**
+ * Edita cabecera y/o ítems de un pedido.
+ * Solo ADMIN.
+ *
+ * cambios: {
+ *   cliente_nombre? : string,
+ *   notas_pedido?   : string,
+ *   estado_pago?    : 'PENDIENTE' | 'PAGADO',
+ *   items?          : [{ fragancia, producto, cantidad, flag?, alias_usado?, nota? }]
+ * }
+ */
+export async function editarPedido(pedidoId, cambios, email) {
+  const res = await apiGet({ accion: 'editarPedido', pedidoId, cambios, email });
+  // res = { ok: true, pedido_id, mensaje } — ya desenvuelto por apiGet
+  return res;
+}
+
+/**
+ * Elimina un pedido sin restricciones (solo ADMIN).
+ * Mueve a CS_Pedidos_Archivo antes de borrar.
+ */
+export async function eliminarPedidoAdmin(pedidoId, email) {
+  const res = await apiGet({ accion: 'eliminarPedidoAdmin', pedidoId, email });
+  return res;
 }
