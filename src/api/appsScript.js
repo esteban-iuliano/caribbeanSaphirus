@@ -151,7 +151,7 @@ export async function guardarPedido(clienteId, items, nota = '', origen = 'PWA')
 export async function obtenerPedidos() {
   const res = await apiGet({ accion: 'obtenerPedidos' });
   const pedidos = (res?.pedidos ?? []).map(p => ({
-    pedidoId:      p.ID_Pedido       ?? p.Pedido_ID      ?? p.id_pedido      ?? '',  // ← v1.4
+    pedidoId:      p.ID_Pedido       ?? p.Pedido_ID      ?? p.Timestamp      ?? p.id_pedido ?? '',  // ← v1.4 fix: sheet usa Timestamp como ID
     clienteId:     p.Cliente_ID      ?? p.cliente_id     ?? '',
     clienteNombre: p.Cliente_Nombre  ?? p.cliente_nombre ?? '',
     canal:         p.Canal           ?? p.canal          ?? '',
