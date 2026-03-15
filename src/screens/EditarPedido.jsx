@@ -409,7 +409,7 @@ export default function EditarPedido() {
       </section>
 
       {/* ── Barra fija inferior ── */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-4 py-3 flex gap-3 z-10">
+      <div className="fixed bottom-16 left-0 right-0 bg-white border-t border-slate-200 px-4 py-3 flex gap-3 z-10">
         <button
           onClick={handleBack}
           className="shrink-0 px-5 py-3 rounded-xl bg-slate-100 text-slate-700 font-medium text-sm active:bg-slate-200"
