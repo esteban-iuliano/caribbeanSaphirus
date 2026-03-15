@@ -1,5 +1,6 @@
 import { useLocation } from 'react-router-dom';
-import { useApp } from '../../context/AppContext.jsx';
+import { useApp }  from '../../context/AppContext.jsx';
+import { useAuth } from '../../context/AuthContext.jsx';
 
 const TITLES = {
   '/':            'Inicio',
@@ -7,33 +8,59 @@ const TITLES = {
   '/resultado':   'Resultado',
   '/consolidado': 'Consolidado Sheru',
   '/historial':   'Historial',
+  '/formulario':  'Nuevo Pedido',
 };
 
 export default function Header() {
-  const { pathname } = useLocation();
-  const { state }    = useApp();
+  const { pathname }  = useLocation();
+  const { state }     = useApp();
+  const { user, signOut } = useAuth();
 
-  const title      = TITLES[pathname] ?? 'CaribbeanSaphirus';
-  const backendOk  = state.backendOk;
+  const title     = TITLES[pathname] ?? 'CaribbeanSaphirus';
+  const backendOk = state.backendOk;
 
   return (
     <header className="sticky top-0 z-20 bg-brand-700 text-white shadow-md">
       <div className="flex items-center justify-between px-4 h-14">
-        <div className="flex items-center gap-2">
-          <span className="text-lg font-semibold tracking-tight">{title}</span>
-        </div>
 
-        <div className="flex items-center gap-2">
-          {/* Indicador de estado del backend */}
+        {/* Título de pantalla */}
+        <span className="text-lg font-semibold tracking-tight">{title}</span>
+
+        <div className="flex items-center gap-3">
+          {/* Indicador backend */}
           <span
-            title={backendOk === null ? 'Verificando…' : backendOk ? 'Backend OK' : 'Sin conexión'}
+            title={
+              backendOk === null ? 'Verificando…' :
+              backendOk          ? 'Backend OK'   : 'Sin conexión'
+            }
             className={`inline-block w-2 h-2 rounded-full transition-colors ${
               backendOk === null ? 'bg-yellow-400 animate-pulse' :
               backendOk          ? 'bg-emerald-400' :
                                    'bg-red-400'
             }`}
           />
-          <span className="text-xs text-brand-200 font-mono">CS</span>
+
+          {/* Nombre + rol */}
+          {user && (
+            <span className="text-xs text-brand-200 hidden sm:inline">
+              {user.nombre}
+              <span className="ml-1 opacity-60">
+                ({user.rol === 'ADMIN' ? 'admin' : 'vendedor'})
+              </span>
+            </span>
+          )}
+
+          {/* Botón cerrar sesión */}
+          {user && (
+            <button
+              onClick={signOut}
+              title="Cerrar sesión"
+              className="text-brand-200 hover:text-white transition-colors text-base leading-none"
+              aria-label="Cerrar sesión"
+            >
+              🚪
+            </button>
+          )}
         </div>
       </div>
 
