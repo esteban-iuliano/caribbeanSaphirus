@@ -1,7 +1,7 @@
 /**
  * Resultado.jsx
  * Muestra los items parseados, permite corregir cantidades,
- * y guarda el pedido confirmado.
+ * corregir fragancia en ítems REVISAR, y guarda el pedido confirmado.
  */
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -37,6 +37,16 @@ export default function Resultado() {
     const n = parseInt(valor, 10);
     if (isNaN(n) || n < 0) return;
     setItems(prev => prev.map((it, i) => i === idx ? { ...it, cantidad: n } : it));
+  };
+
+  // FIX: permite editar fragancia en ítems REVISAR
+  // Al corregir la fragancia, el flag pasa a OK automáticamente
+  const actualizarFragancia = (idx, valor) => {
+    setItems(prev => prev.map((it, i) =>
+      i === idx
+        ? { ...it, fragancia: valor, flag: valor.trim() ? 'OK' : 'REVISAR' }
+        : it
+    ));
   };
 
   const eliminarItem = (idx) => {
@@ -81,14 +91,26 @@ export default function Resultado() {
         {items.map((item, idx) => {
           const prod = getProductoMeta(item.producto);
           const flag = getFlagMeta(item.flag);
+          const esRevisar = item.flag === 'REVISAR' || item.flag === 'NUEVA';
           return (
-            <li key={idx} className="bg-white border border-slate-200 rounded-xl p-3 space-y-2">
+            <li key={idx} className={`bg-white border rounded-xl p-3 space-y-2 ${esRevisar ? 'border-amber-300' : 'border-slate-200'}`}>
               {/* Fila superior */}
               <div className="flex items-start justify-between gap-2">
                 <div className="flex-1 min-w-0">
-                  <div className="font-medium text-sm text-slate-800 truncate">{item.fragancia}</div>
+                  {/* FIX: input editable para ítems REVISAR/NUEVA, texto para el resto */}
+                  {esRevisar ? (
+                    <input
+                      type="text"
+                      value={item.fragancia}
+                      onChange={e => actualizarFragancia(idx, e.target.value)}
+                      placeholder="Corregir fragancia…"
+                      className="w-full border border-amber-300 rounded-lg px-2 py-1 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-400 bg-amber-50"
+                    />
+                  ) : (
+                    <div className="font-medium text-sm text-slate-800 truncate">{item.fragancia}</div>
+                  )}
                   {item.alias_usado && (
-                    <div className="text-xs text-slate-400">alias: {item.alias_usado}</div>
+                    <div className="text-xs text-slate-400 mt-0.5">alias: {item.alias_usado}</div>
                   )}
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
@@ -97,7 +119,7 @@ export default function Resultado() {
                 </div>
               </div>
 
-              {/* Fila inferior: cantidad + eliminar */}
+              {/* Fila inferior: cantidad + nota + eliminar */}
               <div className="flex items-center gap-3">
                 <label className="text-xs text-slate-500">Cant.</label>
                 <input
@@ -109,6 +131,9 @@ export default function Resultado() {
                 />
                 {item.nota && (
                   <span className="text-xs text-amber-600 flex-1 truncate">⚠ {item.nota}</span>
+                )}
+                {esRevisar && (
+                  <span className="text-xs text-amber-600 flex-1">✏️ Corregir fragancia</span>
                 )}
                 <button
                   onClick={() => eliminarItem(idx)}

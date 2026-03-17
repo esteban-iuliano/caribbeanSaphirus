@@ -2,6 +2,10 @@
  * EditarPedido.jsx — Sprint C'
  * Edición completa de un pedido existente. Solo ADMIN.
  * Ruta: /editar/:pedidoId
+ *
+ * Fix v2: 
+ *   - Notas: lee det.pedido.Notas_Pedido ?? det.pedido.Notas
+ *   - Ítems: permite editar fragancia de ítems existentes
  */
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -47,8 +51,6 @@ export default function EditarPedido() {
   const [items,    setItems]    = useState([]);
 
   // Catálogo
-  // productos: [{ nombre, precio, tiene_fragancia }]
-  // fragancias: { "Aerosol 280cc": ["Lavanda", "Limón", ...], ... }
   const [catalogo, setCatalogo] = useState({ productos: [], fragancias: {} });
 
   // Campos cabecera editables
@@ -72,22 +74,20 @@ export default function EditarPedido() {
     setLoading(true);
     setError('');
     try {
-      // Paralelo: detalle del pedido + catálogo completo
-      const canal = user?.canal || 'CHINOS'; // canal del admin para el catálogo
+      const canal = user?.canal || 'CHINOS';
       const [det, cat] = await Promise.all([
         obtenerPedidoDetalle(pedidoId, user.email),
         obtenerCatalogo(canal),
       ]);
 
-      // det = { pedido: {...}, items: [...] }
-      // cat = { clientes, productos, fragancias }
       if (!det.pedido) throw new Error('Pedido no encontrado');
 
       setPedido(det.pedido);
       setItems(det.items || []);
-      setClienteNombre(det.pedido.Cliente_Nombre  || '');
-      setNotasPedido(  det.pedido.Notas_Pedido    || '');
-      setEstadoPago((  det.pedido.estado_pago      || 'PENDIENTE').toUpperCase());
+      setClienteNombre(det.pedido.Cliente_Nombre || '');
+      // FIX: la columna real en Sheets se llama 'Notas', no 'Notas_Pedido'
+      setNotasPedido(det.pedido.Notas_Pedido ?? det.pedido.Notas ?? '');
+      setEstadoPago((det.pedido.estado_pago || 'PENDIENTE').toUpperCase());
 
       setCatalogo({
         productos:  cat.productos  || [],
@@ -102,15 +102,13 @@ export default function EditarPedido() {
 
   useEffect(() => { cargarDatos(); }, [cargarDatos]);
 
-  // ── Totales estimados en tiempo real ──────────────────────────────────────
-  // precio_unit_sheru viene de CS_Items
+  // ── Totales estimados ─────────────────────────────────────────────────────
   const totalSheru = items.reduce((s, i) => {
     const precio = parseFloat(i.precio_unit_sheru) || 0;
     const cant   = parseInt(i.Cantidad ?? i.cantidad) || 0;
     return s + precio * cant;
   }, 0);
 
-  // Markup del pedido original (para estimar total cliente)
   const markupOriginal =
     pedido && parseFloat(pedido.total_sheru) > 0
       ? parseFloat(pedido.total_cliente) / parseFloat(pedido.total_sheru)
@@ -118,20 +116,27 @@ export default function EditarPedido() {
 
   const totalClienteEstimado = totalSheru * markupOriginal;
 
-  // Fragancias disponibles para el producto elegido en el add-form
-  // catalogo.fragancias = { "Aerosol 280cc": ["Lavanda", ...] }
+  // Fragancias para el form de nuevo ítem
   const fraganciasFiltradas = nuevoProducto
     ? (catalogo.fragancias[nuevoProducto] || [])
     : [];
 
-  const productoObj  = catalogo.productos.find(p => p.nombre === nuevoProducto);
-  const tieneFrag    = productoObj ? productoObj.tiene_fragancia !== false : true;
+  const productoObj = catalogo.productos.find(p => p.nombre === nuevoProducto);
+  const tieneFrag   = productoObj ? productoObj.tiene_fragancia !== false : true;
 
   // ── Handlers ítems ────────────────────────────────────────────────────────
   function cambiarCantidad(idx, val) {
     const n = Math.max(1, parseInt(val) || 1);
     setItems(prev => prev.map((it, i) =>
       i === idx ? { ...it, Cantidad: n, cantidad: n } : it
+    ));
+    setModified(true);
+  }
+
+  // FIX: permite cambiar fragancia de ítems existentes
+  function cambiarFragancia(idx, val) {
+    setItems(prev => prev.map((it, i) =>
+      i === idx ? { ...it, Fragancia: val, fragancia: val } : it
     ));
     setModified(true);
   }
@@ -154,7 +159,7 @@ export default function EditarPedido() {
       Producto:            nuevoProducto,
       Fragancia:           nuevoFragancia,
       Cantidad:            nuevaCantidad,
-      precio_unit_sheru:   0,  // el backend recalcula al guardar
+      precio_unit_sheru:   0,
       precio_unit_cliente: 0,
       Flag:                'OK',
       Alias_Usado:         '',
@@ -176,7 +181,6 @@ export default function EditarPedido() {
     setSaving(true);
     setError('');
     try {
-      // Normalizar campos: CS_Items puede tener PascalCase o camelCase
       const itemsNorm = items.map(i => ({
         fragancia:   i.Fragancia   ?? i.fragancia   ?? '',
         producto:    i.Producto    ?? i.producto     ?? '',
@@ -315,27 +319,67 @@ export default function EditarPedido() {
           const prod = item.Producto  ?? item.producto  ?? '';
           const frag = item.Fragancia ?? item.fragancia ?? '';
           const cant = item.Cantidad  ?? item.cantidad  ?? 0;
+          // Fragancias disponibles para este producto
+          const fragsDisponibles = catalogo.fragancias[prod] || [];
+          const productoTieneFrag = (() => {
+            const p = catalogo.productos.find(p => p.nombre === prod);
+            return p ? p.tiene_fragancia !== false : true;
+          })();
+
           return (
-            <div key={idx} className="flex items-center gap-2 py-2 border-b border-slate-100 last:border-0">
-              <span className="text-xl">{getEmoji(prod)}</span>
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-semibold truncate">{frag || '—'}</div>
-                <span className="text-xs font-semibold bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">
-                  {prod}
-                </span>
+            <div key={idx} className="py-2 border-b border-slate-100 last:border-0">
+              {/* Fila principal */}
+              <div className="flex items-center gap-2">
+                <span className="text-xl">{getEmoji(prod)}</span>
+                <div className="flex-1 min-w-0">
+                  <span className="text-xs font-semibold bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">
+                    {prod}
+                  </span>
+                </div>
+                <input
+                  type="number"
+                  min={1}
+                  className="w-14 text-center border border-slate-200 rounded-lg py-1.5 text-sm"
+                  value={cant}
+                  onChange={e => cambiarCantidad(idx, e.target.value)}
+                />
+                <button
+                  onClick={() => eliminarItem(idx)}
+                  className="text-lg text-red-400 active:text-red-600 px-1"
+                  title="Quitar ítem"
+                >🗑</button>
               </div>
-              <input
-                type="number"
-                min={1}
-                className="w-14 text-center border border-slate-200 rounded-lg py-1.5 text-sm"
-                value={cant}
-                onChange={e => cambiarCantidad(idx, e.target.value)}
-              />
-              <button
-                onClick={() => eliminarItem(idx)}
-                className="text-lg text-red-400 active:text-red-600 px-1"
-                title="Quitar ítem"
-              >🗑</button>
+
+              {/* FIX: selector de fragancia para ítems existentes */}
+              {productoTieneFrag && (
+                <div className="mt-1.5 ml-8">
+                  {fragsDisponibles.length > 0 ? (
+                    <select
+                      className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-sm bg-white outline-none focus:border-blue-400"
+                      value={frag}
+                      onChange={e => cambiarFragancia(idx, e.target.value)}
+                    >
+                      <option value="">— fragancia —</option>
+                      {fragsDisponibles.map((f, i) => (
+                        <option key={i} value={f}>{f}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    // Sin catálogo para este producto: input texto libre
+                    <input
+                      type="text"
+                      className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-blue-400"
+                      value={frag}
+                      onChange={e => cambiarFragancia(idx, e.target.value)}
+                      placeholder="Fragancia"
+                    />
+                  )}
+                </div>
+              )}
+              {/* Producto sin fragancia: solo mostrar el nombre */}
+              {!productoTieneFrag && frag && (
+                <div className="mt-1 ml-8 text-sm text-slate-500">{frag}</div>
+              )}
             </div>
           );
         })}
