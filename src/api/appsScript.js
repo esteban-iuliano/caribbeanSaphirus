@@ -162,6 +162,7 @@ export async function obtenerPedidos() {
     estadoPago:    p.estado_pago     ?? 'PENDIENTE',
     totalSheru:    Number(p.total_sheru   ?? 0),
     totalCliente:  Number(p.total_cliente ?? 0),
+    notas:         p.Notas           ?? p.notas          ?? p.Notas_Pedido  ?? '',
     editadoPor:    p.editado_por     ?? '',
     items:         (() => {
       try {
