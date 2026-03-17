@@ -1,9 +1,11 @@
 /**
- * appsScript.js — v1.4
+ * appsScript.js — v1.5
  * Capa de acceso al backend Google Apps Script.
  * Normaliza TODAS las respuestas → { datos: [...] } para los screens.
  * v1.3: agrega obtenerCatalogo, origen en guardarPedido
  * v1.4: agrega pedidoId en obtenerPedidos + Sprint C' (obtenerPedidoDetalle, editarPedido, eliminarPedidoAdmin)
+ * v1.5: obtenerConsolidado acepta desde/hasta para filtro de fechas (Sprint D)
+ *        mapeo campo Notas en obtenerPedidos
  */
 
 const BASE_URL =
@@ -147,23 +149,24 @@ export async function guardarPedido(clienteId, items, nota = '', origen = 'PWA')
 /**
  * Obtiene el historial de pedidos.
  * v1.4: agrega pedidoId al objeto normalizado.
+ * v1.5: mapeo campo Notas (columna real en CS_Pedidos).
  */
 export async function obtenerPedidos() {
   const res = await apiGet({ accion: 'obtenerPedidos' });
   const pedidos = (res?.pedidos ?? []).map(p => ({
-    pedidoId:      p.ID_Pedido       ?? p.Pedido_ID      ?? p.Timestamp      ?? p.id_pedido ?? '',  // ← v1.4 fix: sheet usa Timestamp como ID
-    clienteId:     p.Cliente_ID      ?? p.cliente_id     ?? '',
-    clienteNombre: p.Cliente_Nombre  ?? p.cliente_nombre ?? '',
-    canal:         p.Canal           ?? p.canal          ?? '',
-    vendedor:      p.Vendedor        ?? p.vendedor        ?? '',
+    pedidoId:      p.Timestamp        ?? p.ID_Pedido      ?? p.Pedido_ID      ?? p.id_pedido ?? '',
+    clienteId:     p.Cliente_ID       ?? p.cliente_id     ?? '',
+    clienteNombre: p.Cliente_Nombre   ?? p.cliente_nombre ?? '',
+    canal:         p.Canal            ?? p.canal          ?? '',
+    vendedor:      p.Vendedor         ?? p.vendedor        ?? '',
     fecha:         normalizeDate(p.Fecha ?? p.fecha),
     totalItems:    Number(p.Total_Unidades ?? p.total_unidades ?? 0),
-    estado:        p.Estado          ?? p.estado         ?? '',
-    estadoPago:    p.estado_pago     ?? 'PENDIENTE',
+    estado:        p.Estado           ?? p.estado         ?? '',
+    estadoPago:    p.estado_pago      ?? 'PENDIENTE',
     totalSheru:    Number(p.total_sheru   ?? 0),
     totalCliente:  Number(p.total_cliente ?? 0),
-    notas:         p.Notas           ?? p.notas          ?? p.Notas_Pedido  ?? '',
-    editadoPor:    p.editado_por     ?? '',
+    notas:         p.Notas            ?? p.notas          ?? p.Notas_Pedido  ?? '',
+    editadoPor:    p.editado_por      ?? '',
     items:         (() => {
       try {
         const raw = p.Items_JSON ?? p.items ?? [];
@@ -176,9 +179,16 @@ export async function obtenerPedidos() {
 
 /**
  * Obtiene el consolidado de Sheru.
+ * v1.5: acepta desde/hasta en formato 'yyyy-MM-dd' para filtro de fechas.
+ *
+ * @param {string} desde  — fecha inicio 'yyyy-MM-dd' (opcional)
+ * @param {string} hasta  — fecha fin   'yyyy-MM-dd' (opcional)
  */
-export async function obtenerConsolidado() {
-  const res = await apiGet({ accion: 'obtenerConsolidado' });
+export async function obtenerConsolidado(desde, hasta) {
+  const payload = { accion: 'obtenerConsolidado' };
+  if (desde) payload.desde = desde;
+  if (hasta) payload.hasta = hasta;
+  const res = await apiGet(payload);
   return { datos: res?.items ?? [] };
 }
 
@@ -190,7 +200,6 @@ export async function obtenerConsolidado() {
  */
 export async function obtenerPedidoDetalle(pedidoId, email) {
   const res = await apiGet({ accion: 'obtenerPedidoDetalle', pedidoId, email });
-  // res = { pedido: {...}, items: [...] }
   return {
     pedido: res?.pedido ?? null,
     items:  res?.items  ?? [],
@@ -210,7 +219,6 @@ export async function obtenerPedidoDetalle(pedidoId, email) {
  */
 export async function editarPedido(pedidoId, cambios, email) {
   const res = await apiGet({ accion: 'editarPedido', pedidoId, cambios, email });
-  // res = { ok: true, pedido_id, mensaje } — ya desenvuelto por apiGet
   return res;
 }
 
