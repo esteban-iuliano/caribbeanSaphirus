@@ -21,6 +21,7 @@ export default function FormularioVendedor() {
   const [paso,             setPaso]             = useState(1);
   const [clienteSelec,     setClienteSelec]     = useState(null);
   const [items,            setItems]            = useState([]);
+  const [notasPedido,      setNotasPedido]      = useState('');  // ← NUEVO
   const [guardando,        setGuardando]        = useState(false);
   const [guardadoOk,       setGuardadoOk]       = useState(false);
   const [errorGuardar,     setErrorGuardar]     = useState(null);
@@ -111,7 +112,8 @@ export default function FormularioVendedor() {
     setGuardando(true);
     setErrorGuardar(null);
     try {
-      await guardarPedido(clienteSelec.id, items, '', 'formulario');
+      // NUEVO: se pasa notasPedido como tercer parámetro
+      await guardarPedido(clienteSelec.id, items, notasPedido, 'formulario');
       setGuardadoOk(true);
       setTimeout(() => navigate('/'), 1800);
     } catch (e) {
@@ -121,9 +123,8 @@ export default function FormularioVendedor() {
     }
   };
 
-  const totalUnidades = items.reduce((s, it) => s + it.cantidad, 0);
-  // Puede agregar: producto elegido + (fragancia elegida O producto sin fragancia) + cantidad válida
-  const puedeAgregar  = productoSel && (tieneFragancia ? fragSel : true) && cantidad >= 1;
+  const totalUnidades  = items.reduce((s, it) => s + it.cantidad, 0);
+  const puedeAgregar   = productoSel && (tieneFragancia ? fragSel : true) && cantidad >= 1;
   const puedeContinuar = items.length > 0;
 
   // ─── Pantallas especiales ─────────────────────────────────────
@@ -198,12 +199,21 @@ export default function FormularioVendedor() {
               <span className="text-brand-400 text-xs ml-2">{clienteSelec.id}</span>
             </div>
             <button
-              onClick={() => { setPaso(1); setItems([]); }}
+              onClick={() => { setPaso(1); setItems([]); setNotasPedido(''); }}
               className="text-xs text-brand-600 underline shrink-0"
             >
               Cambiar
             </button>
           </div>
+
+          {/* ── NUEVO: campo de notas ── */}
+          <textarea
+            value={notasPedido}
+            onChange={e => setNotasPedido(e.target.value)}
+            placeholder="Observaciones del pedido (opcional)"
+            rows={2}
+            className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-brand-400 resize-none text-slate-700 placeholder-slate-400"
+          />
 
           {/* Selector de ítem */}
           <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-3">
@@ -356,6 +366,13 @@ export default function FormularioVendedor() {
             <div className="text-xs text-brand-500 mt-0.5">
               {items.length} productos · {totalUnidades} unidades
             </div>
+            {/* Mostrar nota si existe */}
+            {notasPedido.trim() && (
+              <div className="text-xs text-slate-600 mt-1.5 flex items-start gap-1">
+                <span>📝</span>
+                <span>{notasPedido}</span>
+              </div>
+            )}
           </div>
 
           {/* Lista final */}

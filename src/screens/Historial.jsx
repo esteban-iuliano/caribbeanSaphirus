@@ -41,17 +41,14 @@ export default function Historial() {
   const [error,      setError]     = useState(null);
   const [expandido,  setExpandido] = useState(null);
 
-  // Sprint C' — eliminación
-  const [modalEliminar, setModalEliminar] = useState(null); // null | { pedidoId, resumen }
+  const [modalEliminar, setModalEliminar] = useState(null);
   const [eliminando,    setEliminando]    = useState(false);
-  const [toastMsg,      setToastMsg]      = useState('');   // mensaje de éxito flotante
+  const [toastMsg,      setToastMsg]      = useState('');
 
-  // Mostrar toast si venimos de EditarPedido con state.mensaje
   useEffect(() => {
     if (location.state?.mensaje) {
       setToastMsg(location.state.mensaje);
       setTimeout(() => setToastMsg(''), 4000);
-      // Limpiar el state para que no reaparezca en reload
       window.history.replaceState({}, '');
     }
   }, [location.state]);
@@ -139,81 +136,94 @@ export default function Historial() {
       )}
 
       {/* Lista de pedidos */}
-      {pedidos.map((p, idx) => (
-        <div key={idx} className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+      {pedidos.map((p, idx) => {
+        // Nota: puede venir como Notas, notas o notasPedido
+        const nota = p.Notas ?? p.notas ?? p.notasPedido ?? '';
+        return (
+          <div key={idx} className="bg-white border border-slate-200 rounded-xl overflow-hidden">
 
-          {/* Cabecera (acordeón) */}
-          <button
-            onClick={() => setExpandido(expandido === idx ? null : idx)}
-            className="w-full text-left px-4 py-3 flex items-center justify-between active:bg-slate-50"
-          >
-            <div className="flex-1 min-w-0">
-              <div className="font-medium text-sm text-slate-800 truncate">
-                {p.clienteNombre || p.clienteId || '—'}
+            {/* Cabecera (acordeón) */}
+            <button
+              onClick={() => setExpandido(expandido === idx ? null : idx)}
+              className="w-full text-left px-4 py-3 flex items-center justify-between active:bg-slate-50"
+            >
+              <div className="flex-1 min-w-0">
+                <div className="font-medium text-sm text-slate-800 truncate">
+                  {p.clienteNombre || p.clienteId || '—'}
+                </div>
+                <div className="text-xs text-slate-400 mt-0.5 flex items-center gap-2 flex-wrap">
+                  <span>{formatDatetime(p.fecha)} · {p.totalItems ?? 0} u.</span>
+                  <BadgePago estado={p.estadoPago} />
+                  {p.editadoPor && (
+                    <span className="text-xs text-orange-500 font-medium">✏️ editado</span>
+                  )}
+                </div>
               </div>
-              <div className="text-xs text-slate-400 mt-0.5 flex items-center gap-2 flex-wrap">
-                <span>{formatDatetime(p.fecha)} · {p.totalItems ?? 0} u.</span>
-                <BadgePago estado={p.estadoPago} />
-                {p.editadoPor && (
-                  <span className="text-xs text-orange-500 font-medium">✏️ editado</span>
+              <span className="text-slate-400 text-xs ml-2 shrink-0">
+                {expandido === idx ? '▲' : '▼'}
+              </span>
+            </button>
+
+            {/* Ítems expandidos */}
+            {expandido === idx && (
+              <div className="border-t border-slate-100 px-4 py-2 space-y-1">
+
+                {/* NUEVO: nota del pedido */}
+                {nota && (
+                  <div className="flex items-start gap-1.5 text-xs text-slate-500 bg-slate-50 rounded-lg px-3 py-2 mb-2">
+                    <span>📝</span>
+                    <span>{nota}</span>
+                  </div>
+                )}
+
+                {(p.items ?? []).length === 0 ? (
+                  <p className="text-xs text-slate-400 py-1">Sin detalle disponible</p>
+                ) : (
+                  (p.items ?? []).map((it, i) => (
+                    <div key={i} className="flex justify-between text-xs text-slate-600 py-0.5">
+                      <span>
+                        {it.fragancia ?? it.Fragancia ?? '—'}
+                        <span className="text-slate-400 ml-1">
+                          ({it.producto ?? it.Producto ?? '—'})
+                        </span>
+                      </span>
+                      <span className="font-medium">{it.cantidad ?? it.Cantidad ?? 0}</span>
+                    </div>
+                  ))
+                )}
+
+                {/* Totales (solo ADMIN) */}
+                {esAdmin && (p.totalSheru > 0 || p.totalCliente > 0) && (
+                  <div className="mt-2 pt-2 border-t border-slate-100 flex justify-between text-xs text-slate-500">
+                    <span>Sheru: <strong>${p.totalSheru?.toLocaleString('es-AR')}</strong></span>
+                    <span>Cliente: <strong className="text-green-700">${p.totalCliente?.toLocaleString('es-AR')}</strong></span>
+                  </div>
+                )}
+
+                {/* Botones ADMIN */}
+                {esAdmin && (
+                  <div className="mt-3 pt-2 border-t border-slate-100 flex justify-end gap-2">
+                    <button
+                      onClick={() => navigate(`/editar/${p.pedidoId}`)}
+                      className="text-xs font-semibold bg-blue-50 text-blue-700
+                                 px-3 py-1.5 rounded-lg active:bg-blue-100"
+                    >
+                      ✏️ Editar
+                    </button>
+                    <button
+                      onClick={() => abrirModalEliminar(p)}
+                      className="text-xs font-semibold bg-red-50 text-red-700
+                                 px-3 py-1.5 rounded-lg active:bg-red-100"
+                    >
+                      🗑️ Eliminar
+                    </button>
+                  </div>
                 )}
               </div>
-            </div>
-            <span className="text-slate-400 text-xs ml-2 shrink-0">
-              {expandido === idx ? '▲' : '▼'}
-            </span>
-          </button>
-
-          {/* Ítems expandidos */}
-          {expandido === idx && (
-            <div className="border-t border-slate-100 px-4 py-2 space-y-1">
-              {(p.items ?? []).length === 0 ? (
-                <p className="text-xs text-slate-400 py-1">Sin detalle disponible</p>
-              ) : (
-                (p.items ?? []).map((it, i) => (
-                  <div key={i} className="flex justify-between text-xs text-slate-600 py-0.5">
-                    <span>
-                      {it.fragancia ?? it.Fragancia ?? '—'}
-                      <span className="text-slate-400 ml-1">
-                        ({it.producto ?? it.Producto ?? '—'})
-                      </span>
-                    </span>
-                    <span className="font-medium">{it.cantidad ?? it.Cantidad ?? 0}</span>
-                  </div>
-                ))
-              )}
-
-              {/* Totales (solo ADMIN) */}
-              {esAdmin && (p.totalSheru > 0 || p.totalCliente > 0) && (
-                <div className="mt-2 pt-2 border-t border-slate-100 flex justify-between text-xs text-slate-500">
-                  <span>Sheru: <strong>${p.totalSheru?.toLocaleString('es-AR')}</strong></span>
-                  <span>Cliente: <strong className="text-green-700">${p.totalCliente?.toLocaleString('es-AR')}</strong></span>
-                </div>
-              )}
-
-              {/* Botones ADMIN */}
-              {esAdmin && (
-                <div className="mt-3 pt-2 border-t border-slate-100 flex justify-end gap-2">
-                  <button
-                    onClick={() => navigate(`/editar/${p.pedidoId}`)}
-                    className="text-xs font-semibold bg-blue-50 text-blue-700
-                               px-3 py-1.5 rounded-lg active:bg-blue-100"
-                  >
-                    ✏️ Editar
-                  </button>
-                  <button
-                    onClick={() => abrirModalEliminar(p)}
-                    className="text-xs font-semibold bg-red-50 text-red-700
-                               px-3 py-1.5 rounded-lg active:bg-red-100"
-                  >
-                    🗑️ Eliminar
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      ))}
+            )}
+          </div>
+        );
+      })}
 
       {/* Modal confirmación eliminación */}
       {modalEliminar && (

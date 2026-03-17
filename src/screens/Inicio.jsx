@@ -26,15 +26,15 @@ function hoyStr() {
 export default function Inicio() {
   const { state } = useApp();
   const navigate  = useNavigate();
-  const [pedidos, setPedidos]             = useState([]);
+  const [pedidos, setPedidos]               = useState([]);
   const [loadingPedidos, setLoadingPedidos] = useState(true);
-  const [errorPedidos, setErrorPedidos]   = useState(null);
+  const [errorPedidos, setErrorPedidos]     = useState(null);
 
   useEffect(() => {
     const timeout = setTimeout(() => {
       setLoadingPedidos(false);
       setErrorPedidos('El servidor tardó demasiado. Reintentá más tarde.');
-    }, 15000); // 15 segundos máximo
+    }, 15000);
 
     obtenerPedidos()
       .then(res => setPedidos(res?.datos ?? []))
@@ -89,14 +89,27 @@ export default function Inicio() {
           <p className="text-slate-400 text-sm text-center py-4">Sin pedidos por hoy</p>
         ) : (
           <ul className="space-y-2">
-            {pedidosHoy.map((p, i) => (
-              <li key={i} className="flex items-center justify-between text-sm">
-                <span className="font-medium text-slate-700">
-                  {p.clienteNombre || p.clienteId}
-                </span>
-                <span className="text-slate-400">{p.totalItems} u.</span>
-              </li>
-            ))}
+            {pedidosHoy.map((p, i) => {
+              // Nota: puede venir como Notas, notas o notasPedido según normalización
+              const nota = p.Notas ?? p.notas ?? p.notasPedido ?? '';
+              return (
+                <li key={i} className="text-sm border-b border-slate-50 last:border-0 pb-2 last:pb-0">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium text-slate-700">
+                      {p.clienteNombre || p.clienteId}
+                    </span>
+                    <span className="text-slate-400">{p.totalItems} u.</span>
+                  </div>
+                  {/* NUEVO: mostrar nota si existe */}
+                  {nota && (
+                    <div className="text-xs text-slate-500 mt-0.5 flex items-start gap-1">
+                      <span>📝</span>
+                      <span className="truncate">{nota}</span>
+                    </div>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>
