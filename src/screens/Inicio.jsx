@@ -5,6 +5,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext.jsx';
+import { useAuth } from '../context/AuthContext.jsx';
 import { obtenerPedidos } from '../api/appsScript.js';
 import Loader from '../components/ui/Loader.jsx';
 
@@ -25,6 +26,8 @@ function hoyStr() {
 
 export default function Inicio() {
   const { state } = useApp();
+  const { user }  = useAuth();
+  const esAdmin   = user?.rol === 'ADMIN';
   const navigate  = useNavigate();
   const [pedidos, setPedidos]               = useState([]);
   const [loadingPedidos, setLoadingPedidos] = useState(true);
@@ -116,13 +119,15 @@ export default function Inicio() {
 
       {/* Accesos rápidos */}
       <div className="grid grid-cols-2 gap-3">
-        <button
-          onClick={() => navigate('/consolidado')}
-          className="bg-white border border-slate-200 rounded-xl p-4 text-center shadow-sm active:bg-slate-50"
-        >
-          <div className="text-2xl mb-1">📋</div>
-          <div className="text-xs font-medium text-slate-600">Consolidado Sheru</div>
-        </button>
+        {esAdmin && (
+          <button
+            onClick={() => navigate('/consolidado')}
+            className="bg-white border border-slate-200 rounded-xl p-4 text-center shadow-sm active:bg-slate-50"
+          >
+            <div className="text-2xl mb-1">📋</div>
+            <div className="text-xs font-medium text-slate-600">Consolidado Sheru</div>
+          </button>
+        )}
         <button
           onClick={() => navigate('/historial')}
           className="bg-white border border-slate-200 rounded-xl p-4 text-center shadow-sm active:bg-slate-50"
