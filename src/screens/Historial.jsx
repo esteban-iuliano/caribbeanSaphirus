@@ -2,9 +2,11 @@
  * Historial.jsx — Sprint C'
  * Lista todos los pedidos guardados ordenados por fecha desc.
  * ADMIN: botones editar ✏️ y eliminar 🗑️ por pedido.
- * Fix: muestra pedidoId en la línea de fecha para identificación rápida.
+ * Fix: muestra pedidoId en línea de fecha.
+ * Nuevo: filtro por vendedor (client-side, sin backend).
+ *        ADMIN ve el selector; VENDEDOR ve solo sus pedidos automáticamente.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { obtenerPedidos, eliminarPedidoAdmin } from '../api/appsScript.js';
@@ -41,6 +43,7 @@ export default function Historial() {
   const [loading,    setLoad]      = useState(true);
   const [error,      setError]     = useState(null);
   const [expandido,  setExpandido] = useState(null);
+  const [filtroVendedor, setFiltroVendedor] = useState('');
 
   const [modalEliminar, setModalEliminar] = useState(null);
   const [eliminando,    setEliminando]    = useState(false);
@@ -58,6 +61,7 @@ export default function Historial() {
   const cargarPedidos = () => {
     setLoad(true);
     setError(null);
+    setExpandido(null);
 
     const timeout = setTimeout(() => {
       setLoad(false);
@@ -79,6 +83,30 @@ export default function Historial() {
     const cleanup = cargarPedidos();
     return cleanup;
   }, []);
+
+  // ── Vendedores únicos para el selector (solo ADMIN) ───────────
+  const vendedoresUnicos = useMemo(() => {
+    const nombres = [...new Set(
+      pedidos
+        .map(p => p.vendedor || '')
+        .filter(Boolean)
+    )].sort((a, b) => a.localeCompare(b, 'es'));
+    return nombres;
+  }, [pedidos]);
+
+  // ── Pedidos filtrados ─────────────────────────────────────────
+  // ADMIN: filtra por vendedor seleccionado (o muestra todos si no hay selección)
+  // VENDEDOR: ve solo sus propios pedidos (filtro automático por nombre)
+  const pedidosFiltrados = useMemo(() => {
+    if (!esAdmin) {
+      // El vendedor solo ve sus pedidos — filtra por su nombre de usuario
+      return pedidos.filter(p =>
+        (p.vendedor || '').toLowerCase() === (user?.nombre || '').toLowerCase()
+      );
+    }
+    if (!filtroVendedor) return pedidos;
+    return pedidos.filter(p => (p.vendedor || '') === filtroVendedor);
+  }, [pedidos, filtroVendedor, esAdmin, user]);
 
   // ── Eliminación ───────────────────────────────────────────────
   function abrirModalEliminar(p) {
@@ -128,7 +156,31 @@ export default function Historial() {
         </div>
       )}
 
-      {/* Sin pedidos */}
+      {/* Filtro por vendedor — solo ADMIN, solo si hay pedidos */}
+      {esAdmin && pedidos.length > 0 && (
+        <div className="flex items-center gap-2">
+          <select
+            value={filtroVendedor}
+            onChange={e => { setFiltroVendedor(e.target.value); setExpandido(null); }}
+            className="flex-1 border border-slate-300 rounded-xl px-3 py-2 text-sm
+                       text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-brand-400"
+          >
+            <option value="">Todos los vendedores ({pedidos.length})</option>
+            {vendedoresUnicos.map(nombre => (
+              <option key={nombre} value={nombre}>{nombre}</option>
+            ))}
+          </select>
+          {filtroVendedor && (
+            <button
+              onClick={() => { setFiltroVendedor(''); setExpandido(null); }}
+              className="text-slate-400 hover:text-slate-600 text-lg leading-none px-1"
+              title="Limpiar filtro"
+            >✕</button>
+          )}
+        </div>
+      )}
+
+      {/* Sin pedidos en la base */}
       {!error && pedidos.length === 0 && (
         <div className="text-center text-slate-400 text-sm py-16">
           <p className="text-4xl mb-3">📂</p>
@@ -136,9 +188,22 @@ export default function Historial() {
         </div>
       )}
 
+      {/* Sin resultados para el filtro activo */}
+      {!error && pedidos.length > 0 && pedidosFiltrados.length === 0 && (
+        <div className="text-center text-slate-400 text-sm py-10">
+          <p className="text-3xl mb-3">🔍</p>
+          <p className="text-slate-500">
+            {filtroVendedor
+              ? `Sin pedidos para ${filtroVendedor}`
+              : 'Sin pedidos registrados para tu usuario'}
+          </p>
+        </div>
+      )}
+
       {/* Lista de pedidos */}
-      {pedidos.map((p, idx) => {
-        const nota = p.Notas ?? p.notas ?? p.notasPedido ?? '';
+      {pedidosFiltrados.map((p, idx) => {
+        const nota    = p.Notas ?? p.notas ?? p.notasPedido ?? '';
+        const idLabel = p.pedidoId ? String(p.pedidoId) : '';
         return (
           <div key={idx} className="bg-white border border-slate-200 rounded-xl overflow-hidden">
 
@@ -151,9 +216,12 @@ export default function Historial() {
                 <div className="font-medium text-sm text-slate-800 truncate">
                   {p.clienteNombre || p.clienteId || '—'}
                 </div>
-                {/* FIX: pedidoId visible para identificación rápida */}
-                <div className="text-xs text-slate-400 mt-0.5 flex items-center gap-2 flex-wrap">
-                  <span>{p.pedidoId && <span className="font-medium text-slate-500">{p.pedidoId} · </span>}{formatDatetime(p.fecha)} · {p.totalItems ?? 0} u.</span>
+                <div className="text-xs text-slate-400 mt-0.5 flex items-center gap-1 flex-wrap">
+                  {/* ID del pedido — string puro, renderizado separado */}
+                  {idLabel !== '' && (
+                    <span className="font-semibold text-slate-500">{idLabel} ·</span>
+                  )}
+                  <span>{formatDatetime(p.fecha)} · {p.totalItems ?? 0} u.</span>
                   <BadgePago estado={p.estadoPago} />
                   {p.editadoPor && (
                     <span className="text-xs text-orange-500 font-medium">✏️ editado</span>
