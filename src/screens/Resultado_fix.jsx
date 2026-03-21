@@ -2,6 +2,10 @@
  * Resultado.jsx
  * Muestra los items parseados, permite corregir cantidades,
  * corregir fragancia en ítems REVISAR, y guarda el pedido confirmado.
+ *
+ * FIX v1.6: handleGuardar solo activa el estado "guardado" si la llamada
+ * fue exitosa. Si falla, muestra advertencia explícita para evitar que el
+ * usuario reintente sin saber que el pedido puede haberse guardado igual.
  */
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -20,6 +24,9 @@ export default function Resultado() {
   const pedido = state.pedidoParsado;
   const [items, setItems] = useState(pedido?.items ?? []);
   const [guardado, setGuardado] = useState(false);
+  // intentoFallido: true cuando hubo al menos un error al guardar.
+  // Activa la advertencia anti-duplicados para que el usuario vaya al Historial.
+  const [intentoFallido, setIntentoFallido] = useState(false);
 
   if (!pedido) {
     return (
@@ -54,7 +61,25 @@ export default function Resultado() {
   };
 
   const handleGuardar = async () => {
-    await call(() => guardarPedido(pedido.clienteId, items));
+    // Resetear advertencia en cada intento
+    setIntentoFallido(false);
+
+    let res;
+    try {
+      res = await call(() => guardarPedido(pedido.clienteId, items));
+    } catch {
+      // call() lanzó — el error ya está en el estado de useApi
+      setIntentoFallido(true);
+      return;
+    }
+
+    // Si call() no lanza pero tampoco devuelve datos, también es fallo
+    if (!res) {
+      setIntentoFallido(true);
+      return;
+    }
+
+    // Éxito confirmado
     setGuardado(true);
     setTimeout(() => {
       actions.clearPedido();
@@ -150,8 +175,28 @@ export default function Resultado() {
         <p className="text-center text-slate-400 text-sm py-8">Sin items. Volvé a parsear.</p>
       )}
 
-      {error && (
+      {/* Error técnico genérico (solo si NO hubo intento fallido, para no mostrar ambos) */}
+      {error && !intentoFallido && (
         <div className="bg-red-50 text-red-700 text-sm rounded-xl px-4 py-3">{error}</div>
+      )}
+
+      {/* Advertencia anti-duplicados — se muestra cuando el guardado falló */}
+      {intentoFallido && (
+        <div className="bg-amber-50 border border-amber-300 rounded-xl px-4 py-3 space-y-2">
+          <p className="text-amber-800 text-sm font-semibold">
+            ⚠️ Hubo un error al confirmar el pedido
+          </p>
+          <p className="text-amber-700 text-xs leading-relaxed">
+            El pedido <strong>puede haberse guardado igual</strong>. Antes de volver a intentar,
+            revisá el Historial para evitar duplicados.
+          </p>
+          <button
+            onClick={() => navigate('/historial')}
+            className="w-full bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium py-2 rounded-lg transition-colors"
+          >
+            📂 Ver Historial antes de reintentar
+          </button>
+        </div>
       )}
 
       {/* Acciones */}
@@ -164,7 +209,7 @@ export default function Resultado() {
         </button>
         <button
           onClick={handleGuardar}
-          disabled={items.length === 0}
+          disabled={items.length === 0 || loading}
           className="flex-1 bg-brand-700 hover:bg-brand-800 disabled:bg-slate-300 text-white font-semibold py-3 rounded-xl text-sm transition-colors"
         >
           💾 Confirmar y Guardar

@@ -1,11 +1,15 @@
 /**
- * appsScript.js — v1.5
+ * appsScript.js — v1.6
  * Capa de acceso al backend Google Apps Script.
  * Normaliza TODAS las respuestas → { datos: [...] } para los screens.
  * v1.3: agrega obtenerCatalogo, origen en guardarPedido
  * v1.4: agrega pedidoId en obtenerPedidos + Sprint C' (obtenerPedidoDetalle, editarPedido, eliminarPedidoAdmin)
  * v1.5: obtenerConsolidado acepta desde/hasta para filtro de fechas (Sprint D)
  *        mapeo campo Notas en obtenerPedidos
+ * v1.6: FIX CRÍTICO — guardarPedido migrado de apiGet → apiPost
+ *        Evita "Failed to fetch" en pedidos grandes por URL demasiado larga.
+ *        doPost ya soportaba guardarPedido desde v2.4 — solo faltaba usarlo.
+ *        + agrega obtenerFinanzas para Sprint E
  */
 
 const BASE_URL =
@@ -129,11 +133,20 @@ export async function parsearImagen(clienteId, imagenBase64) {
 
 /**
  * Guarda un pedido confirmado.
+ *
+ * v1.6 FIX: usa apiPost en lugar de apiGet.
+ * Con apiGet el payload completo iba codificado en la URL. En pedidos
+ * grandes (30+ ítems con fragancias, productos y precios) la URL superaba
+ * el límite de Apps Script → el backend guardaba el pedido pero la respuesta
+ * fallaba → "Failed to fetch" → el usuario reintentaba → pedidos duplicados.
+ * Con apiPost el payload va en el body: sin restricción de tamaño.
+ * doPost en webapp_endpoint.gs ya soporta esta acción desde v2.4.
+ *
  * origen: 'PWA' (parser) | 'formulario' (FormularioVendedor)
  */
 export async function guardarPedido(clienteId, items, nota = '', origen = 'PWA') {
   const totalUnidades = items.reduce((s, it) => s + (it.cantidad ?? 0), 0);
-  return apiGet({
+  return apiPost({
     accion: 'guardarPedido',
     pedido: {
       cliente_id:       clienteId,
@@ -190,6 +203,33 @@ export async function obtenerConsolidado(desde, hasta) {
   if (hasta) payload.hasta = hasta;
   const res = await apiGet(payload);
   return { datos: res?.items ?? [] };
+}
+
+/**
+ * Obtiene datos financieros por rango de fechas.
+ * Sprint E — solo ADMIN.
+ *
+ * @param {string} desde  — fecha inicio 'yyyy-MM-dd' (requerido)
+ * @param {string} hasta  — fecha fin   'yyyy-MM-dd' (requerido)
+ * @returns {{
+ *   resumen:      { total_sheru, total_cliente, margen, pendiente, pedidos_count },
+ *   por_cliente:  [{ id, nombre, total_sheru, total_cliente, pendiente, pedidos }],
+ *   por_vendedor: [{ vendedor, total_sheru, total_cliente, pendiente, pedidos }]
+ * }}
+ */
+export async function obtenerFinanzas(desde, hasta) {
+  const res = await apiGet({ accion: 'obtenerFinanzas', desde, hasta });
+  return {
+    resumen: res?.resumen ?? {
+      total_sheru:   0,
+      total_cliente: 0,
+      margen:        0,
+      pendiente:     0,
+      pedidos_count: 0,
+    },
+    por_cliente:  res?.por_cliente  ?? [],
+    por_vendedor: res?.por_vendedor ?? [],
+  };
 }
 
 // ─── Sprint C' — Edición y eliminación de pedidos (ADMIN) ───────────────────
