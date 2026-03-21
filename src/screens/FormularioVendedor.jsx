@@ -1,27 +1,31 @@
 /**
- * FormularioVendedor.jsx
- * Formulario estructurado para el vendedor (canal CHINOS).
+ * FormularioVendedor.jsx — Sprint E fix
+ * Formulario estructurado para vendedores.
  * Sin parser de IA. Sin precios visibles.
  * 3 pasos: Cliente → Armar pedido → Confirmar
+ *
+ * Cambio Sprint E:
+ *   - Eliminado CANAL hardcodeado ('CHINOS')
+ *   - useCatalogo recibe user → ADMIN ve todos los clientes,
+ *     VENDEDOR ve solo los suyos (filtrado en useCatalogo)
  */
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext.jsx';
 import { useCatalogo } from '../hooks/useCatalogo.js';
 import { guardarPedido } from '../api/appsScript.js';
 import Loader from '../components/ui/Loader.jsx';
 
-// ─── Constante de canal ───────────────────────────────────────
-const CANAL = 'CHINOS';
-
 export default function FormularioVendedor() {
   const navigate = useNavigate();
-  const { clientes, productos, fraganciasPara, loading, error } = useCatalogo(CANAL);
+  const { user } = useAuth();
+  const { clientes, productos, fraganciasPara, loading, error } = useCatalogo(user);
 
   // ── Estado global del formulario ──────────────────────────────
   const [paso,             setPaso]             = useState(1);
   const [clienteSelec,     setClienteSelec]     = useState(null);
   const [items,            setItems]            = useState([]);
-  const [notasPedido,      setNotasPedido]      = useState('');  // ← NUEVO
+  const [notasPedido,      setNotasPedido]      = useState('');
   const [guardando,        setGuardando]        = useState(false);
   const [guardadoOk,       setGuardadoOk]       = useState(false);
   const [errorGuardar,     setErrorGuardar]     = useState(null);
@@ -35,8 +39,8 @@ export default function FormularioVendedor() {
   const [fragListOpen, setFragListOpen] = useState(false);
 
   // ¿El producto seleccionado tiene fragancia?
-  const productoActual   = productos.find(p => p.nombre === productoSel);
-  const tieneFragancia   = productoActual ? productoActual.tiene_fragancia !== false : true;
+  const productoActual = productos.find(p => p.nombre === productoSel);
+  const tieneFragancia = productoActual ? productoActual.tiene_fragancia !== false : true;
 
   // ─── Paso 1: seleccionar cliente ─────────────────────────────
   const clientesFiltrados = useMemo(() =>
@@ -112,7 +116,6 @@ export default function FormularioVendedor() {
     setGuardando(true);
     setErrorGuardar(null);
     try {
-      // NUEVO: se pasa notasPedido como tercer parámetro
       await guardarPedido(clienteSelec.id, items, notasPedido, 'formulario');
       setGuardadoOk(true);
       setTimeout(() => navigate('/'), 1800);
@@ -196,43 +199,27 @@ export default function FormularioVendedor() {
           <div className="flex items-center justify-between bg-brand-50 rounded-xl px-4 py-2.5">
             <div>
               <span className="font-semibold text-brand-800 text-sm">{clienteSelec.nombre}</span>
-              <span className="text-brand-400 text-xs ml-2">{clienteSelec.id}</span>
+              <span className="text-xs text-brand-400 ml-2">{clienteSelec.canal}</span>
             </div>
             <button
-              onClick={() => { setPaso(1); setItems([]); setNotasPedido(''); }}
-              className="text-xs text-brand-600 underline shrink-0"
+              onClick={() => { setClienteSelec(null); setItems([]); setPaso(1); }}
+              className="text-xs text-brand-400 underline"
             >
               Cambiar
             </button>
           </div>
 
-          {/* ── NUEVO: campo de notas ── */}
-          <textarea
-            value={notasPedido}
-            onChange={e => setNotasPedido(e.target.value)}
-            placeholder="Observaciones del pedido (opcional)"
-            rows={2}
-            className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-brand-400 resize-none text-slate-700 placeholder-slate-400"
-          />
+          {/* Selector de producto */}
+          <div className="space-y-4 bg-white border border-slate-100 rounded-2xl p-4 shadow-sm">
 
-          {/* Selector de ítem */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-3">
-            <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Agregar ítem</p>
-
-            {/* Producto */}
             <div className="space-y-1">
               <label className="text-xs text-slate-500">Producto</label>
               <select
                 value={productoSel}
-                onChange={e => {
-                  setProductoSel(e.target.value);
-                  setFragSel('');
-                  setBusqFrag('');
-                  setFragListOpen(false);
-                }}
+                onChange={e => { setProductoSel(e.target.value); setFragSel(''); setBusqFrag(''); }}
                 className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white"
               >
-                <option value="">— Seleccioná un producto —</option>
+                <option value="">Elegir producto…</option>
                 {productos.map(p => (
                   <option key={p.nombre} value={p.nombre}>{p.nombre}</option>
                 ))}
@@ -241,42 +228,42 @@ export default function FormularioVendedor() {
 
             {/* Fragancia — solo si el producto la tiene */}
             {tieneFragancia && (
-            <div className="space-y-1">
-              <label className="text-xs text-slate-500">Fragancia</label>
-              <div className="relative">
-                <input
-                  type="text"
-                  placeholder={productoSel ? 'Escribí para buscar…' : 'Primero elegí un producto'}
-                  value={busqFrag}
-                  disabled={!productoSel}
-                  onChange={e => { setBusqFrag(e.target.value); setFragSel(''); setFragListOpen(true); }}
-                  onFocus={() => setFragListOpen(true)}
-                  className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:bg-slate-50 disabled:text-slate-400"
-                />
-                {fragSel && (
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-emerald-500 text-sm">✓</span>
+              <div className="space-y-1">
+                <label className="text-xs text-slate-500">Fragancia</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder={productoSel ? 'Escribí para buscar…' : 'Primero elegí un producto'}
+                    value={busqFrag}
+                    disabled={!productoSel}
+                    onChange={e => { setBusqFrag(e.target.value); setFragSel(''); setFragListOpen(true); }}
+                    onFocus={() => setFragListOpen(true)}
+                    className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:bg-slate-50 disabled:text-slate-400"
+                  />
+                  {fragSel && (
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-emerald-500 text-sm">✓</span>
+                  )}
+                </div>
+
+                {/* Lista de sugerencias */}
+                {fragListOpen && productoSel && (
+                  <div className="border border-slate-200 rounded-xl overflow-hidden shadow-md max-h-48 overflow-y-auto">
+                    {fragDisponibles.length === 0 ? (
+                      <p className="text-xs text-slate-400 px-3 py-2">Sin resultados</p>
+                    ) : fragDisponibles.map(f => (
+                      <button
+                        key={f}
+                        onMouseDown={() => elegirFragancia(f)}
+                        className={`w-full text-left px-3 py-2.5 text-sm transition-colors hover:bg-brand-50 ${
+                          fragSel === f ? 'bg-brand-50 text-brand-700 font-medium' : 'text-slate-700'
+                        }`}
+                      >
+                        {f}
+                      </button>
+                    ))}
+                  </div>
                 )}
               </div>
-
-              {/* Lista de sugerencias */}
-              {fragListOpen && productoSel && (
-                <div className="border border-slate-200 rounded-xl overflow-hidden shadow-md max-h-48 overflow-y-auto">
-                  {fragDisponibles.length === 0 ? (
-                    <p className="text-xs text-slate-400 px-3 py-2">Sin resultados</p>
-                  ) : fragDisponibles.map(f => (
-                    <button
-                      key={f}
-                      onMouseDown={() => elegirFragancia(f)}
-                      className={`w-full text-left px-3 py-2.5 text-sm transition-colors hover:bg-brand-50 ${
-                        fragSel === f ? 'bg-brand-50 text-brand-700 font-medium' : 'text-slate-700'
-                      }`}
-                    >
-                      {f}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
             )}
 
             {/* Cantidad */}
@@ -343,6 +330,18 @@ export default function FormularioVendedor() {
                 ))}
               </ul>
 
+              {/* Nota del pedido */}
+              <div className="space-y-1">
+                <label className="text-xs text-slate-500">Nota del pedido (opcional)</label>
+                <textarea
+                  value={notasPedido}
+                  onChange={e => setNotasPedido(e.target.value)}
+                  placeholder="Ej: entregar el jueves, separar difusores…"
+                  rows={2}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-700 placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-brand-400 resize-none"
+                />
+              </div>
+
               {/* Continuar a confirmación */}
               <button
                 onClick={() => setPaso(3)}
@@ -366,7 +365,6 @@ export default function FormularioVendedor() {
             <div className="text-xs text-brand-500 mt-0.5">
               {items.length} productos · {totalUnidades} unidades
             </div>
-            {/* Mostrar nota si existe */}
             {notasPedido.trim() && (
               <div className="text-xs text-slate-600 mt-1.5 flex items-start gap-1">
                 <span>📝</span>

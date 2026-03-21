@@ -1,15 +1,24 @@
 /**
  * useCatalogo.js
- * Carga el catálogo necesario para FormularioVendedor:
- * clientes por canal, productos y fragancias.
+ * Carga el catálogo necesario para FormularioVendedor.
+ *
+ * Recibe el objeto `user` del AuthContext:
+ *   { email, nombre, rol, vendedor_id }
+ *
+ * Comportamiento:
+ *   - ADMIN    → todos los clientes, sin filtro
+ *   - VENDEDOR → solo sus clientes (filtra por c.vendedor === user.nombre)
+ *
+ * El backend obtenerCatalogo(null) devuelve todos los clientes cuando
+ * no se pasa canal. El filtro por vendedor se aplica client-side.
  *
  * Uso:
- *   const { clientes, productos, todasFragancias, loading, error } = useCatalogo('CHINOS');
+ *   const { clientes, productos, fraganciasPara, loading, error } = useCatalogo(user);
  */
 import { useState, useEffect } from 'react';
 import { obtenerCatalogo } from '../api/appsScript.js';
 
-export function useCatalogo(canal = 'CHINOS') {
+export function useCatalogo(user = null) {
   const [clientes,   setClientes]   = useState([]);
   const [productos,  setProductos]  = useState([]);
   const [fragancias, setFragancias] = useState({});
@@ -18,25 +27,35 @@ export function useCatalogo(canal = 'CHINOS') {
 
   useEffect(() => {
     setLoading(true);
-    obtenerCatalogo(canal)
+    // Siempre pedimos sin filtro de canal → el backend devuelve todos los clientes
+    obtenerCatalogo(null)
       .then(data => {
-        setClientes(data.clientes   ?? []);
+        let lista = data.clientes ?? [];
+
+        // VENDEDOR: filtrar solo sus propios clientes
+        // La columna CS_Clientes.vendedor guarda el nombre del vendedor
+        // que coincide con CS_Vendedores.nombre (ej: "German", "Pepe")
+        if (user && user.rol !== 'ADMIN' && user.nombre) {
+          lista = lista.filter(c =>
+            (c.vendedor || '').toLowerCase().trim() === user.nombre.toLowerCase().trim()
+          );
+        }
+
+        setClientes(lista);
         setProductos(data.productos ?? []);
         setFragancias(data.fragancias ?? {});
       })
       .catch(e => setError(e?.message ?? 'Error al cargar catálogo'))
       .finally(() => setLoading(false));
-  }, [canal]);
+  }, [user?.rol, user?.nombre]); // re-ejecutar si cambia el usuario
 
   // Lista plana de fragancias únicas y ordenadas A→Z
-  // Se usa cuando no hay mapeo exacto por tipo de producto
   const todasFragancias = [
     ...new Set(Object.values(fragancias).flat()),
   ].sort((a, b) => a.localeCompare(b, 'es'));
 
   /**
    * Devuelve fragancias para un tipo de producto.
-   * La clave del mapa es el nombre exacto del producto (igual que CS_Precios_Sheru col0).
    * Si no hay coincidencia exacta, devuelve todas.
    */
   function fraganciasPara(nombreProducto) {
