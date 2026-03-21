@@ -18,47 +18,63 @@
 * Sprint B: FormularioVendedor (entrada estructurada, 3 pasos)
 * Sprint B': Modelo ampliado (total_sheru, total_cliente, estado_pago, archivado)
 * Sprint C: Google OAuth + roles ADMIN/VENDEDOR
+* Sprint C': Edición y eliminación de pedidos (solo ADMIN)
 * Sprint D: Consolidado Sheru con filtro de fechas
+* Sprint E: Módulo Finanzas (solo ADMIN) + fix filtro clientes/pedidos por rol
 
 ---
 
 ## Roles y usuarios
 * `ADMIN`: esteban.admin (`esteban.iuliano@gmail.com`), ana.admin (`analuci.iuliano@gmail.com`)
-* `VENDEDOR`: esteban.test (`esteban.iuliano2022@gmail.com`) + resto sin email aún
+* `VENDEDOR`: German, Pepe, Valentina, Analia, Luky — cada uno con su mail en CS_Vendedores
+
+---
+
+## Objeto user (AuthContext)
+```
+{
+  email:       string,
+  nombre:      string,   // coincide con CS_Vendedores.nombre (col B)
+  rol:         'ADMIN' | 'VENDEDOR',
+  vendedor_id: string,   // ej: 'VEN-001'
+  canal:       string,   // ej: 'CHINOS', 'PEPE', 'DIRECTO'
+}
+```
 
 ---
 
 ## Archivos clave del frontend
-* `src/context/AuthContext.jsx` — OAuth, sesión localStorage 24hs, `{ email, nombre, rol, vendedor_id }`
+* `src/context/AuthContext.jsx` — OAuth, sesión localStorage 24hs, user incluye canal
 * `src/screens/Login.jsx` — pantalla login con GoogleLogin
-* `src/App.jsx` — ProtectedRoute + rutas por rol
+* `src/App.jsx` — ProtectedRoute + rutas por rol (incluye /finanzas)
 * `src/components/layout/Header.jsx` — nombre/rol + botón signOut
 * `src/components/layout/BottomNav.jsx` — ítems filtrados por rol
-* `src/api/appsScript.js` — v1.6: capa API, normaliza respuestas, `apiGet()` desenvuelve `json.data`, `guardarPedido` usa POST
+* `src/api/appsScript.js` — v1.6: capa API, normaliza respuestas, guardarPedido usa POST
+* `src/hooks/useCatalogo.js` — recibe user; ADMIN ve todos; VENDEDOR filtra por c.vendedor === user.nombre
 
 ---
 
 ## Archivos clave del backend (Apps Script)
-* `webapp_endpoint.gs` v2.4 — doGet + doPost, SHEET_ID, helpers `_cargarPrecios`, `_cargarMarkups`, `buscarCliente`, `guardarItems`, `respuestaOK`
+* `webapp_endpoint.gs` v2.5 — doGet + doPost; verificarUsuario devuelve canal; obtenerFinanzas incluye vendedor en por_cliente
 * `parser_pedidos_v2.gs` — Claude API parser texto
-* `mantenimiento.gs` — `cargarPreciosSheru`, alias management
+* `mantenimiento.gs` — cargarPreciosSheru, alias management
 
 ---
 
 ## Google Sheets
 * `CS_Precios_Sheru`: col A=Producto_Parser, B=Nombre_Sheru, C=Precio, D=tiene_fragancia
-* `CS_Fragancias`: col A=Fragancia, B=Producto (fragancias como objeto `{ Producto: [frag1, frag2] }`)
+* `CS_Fragancias`: col A=Fragancia, B=Producto
 * `CS_Segmentos`: 2 filas header, datos desde fila 3, markup en col D
-* `CS_Pedidos`: headers dinámicos (usar `headers.indexOf()`), columnas en orden actual:
+* `CS_Pedidos`: headers dinámicos, columnas en orden actual:
   `Timestamp, Fecha, Canal, Vendedor, Cliente_ID, Cliente_Nombre, Total_Unidades, Estado,
   Requiere_Revision, Items_JSON, Mensaje_Original, Notas, total_sheru, total_cliente,
   estado_pago, fecha_pago, archivado, editado_por, fecha_edicion`
   — ID del pedido → columna `Timestamp` (formato PED-XXXX)
   — Notas → columna `Notas`
 * `CS_Items`: ID_Pedido, Fecha, Cliente_ID, Cliente_Nombre, Canal, Fragancia, Producto, Cantidad, Flag, Alias_Usado, Nota, precio_unit_sheru, precio_unit_cliente
-* `CS_Vendedores`: headers dinámicos, cols: vendedor_id, nombre, canal, email, rol (ADMIN/VENDEDOR)
+* `CS_Vendedores`: col A=ID_Vendedor, B=Nombre, C=Canal, H=Email, I=Rol
 * `CS_Clientes`: datos desde fila 3, col A=id, B=nombre, C=canal, D=vendedor (nombre exacto coincide con CS_Vendedores.nombre)
-* `CS_Pedidos_Archivo`: pedidos eliminados/archivados
+* `CS_Pedidos_Archivo`: pedidos eliminados por admin
 
 ---
 
@@ -71,18 +87,29 @@
 | `/resultado` | ✅ | ✅ |
 | `/nuevo` (parser) | ✅ | ❌ → `/formulario` |
 | `/consolidado` | ✅ | ❌ → `/` |
-| `/editar/:pedidoId` | ✅ | ❌ |
+| `/editar/:pedidoId` | ✅ | ❌ → `/` |
 | `/finanzas` | ✅ | ❌ → `/` |
+
+---
+
+## Lógica de filtrado por rol
+| Elemento | ADMIN | VENDEDOR |
+|---|---|---|
+| Pedidos en Inicio | Todos | `p.Vendedor === user.nombre` |
+| Clientes en Formulario | Todos | `c.vendedor === user.nombre` |
+| Pedidos en Historial | Todos + filtro dropdown | Solo los suyos |
+| Botón Nuevo Pedido (Inicio) | → `/nuevo` | → `/formulario` |
 
 ---
 
 ## Reglas técnicas inamovibles
 * CORS: todas las llamadas usan GET con `?datos=encodeURIComponent(JSON.stringify({accion,...}))`
-* **EXCEPCIÓN**: `guardarPedido` y `parsearImagen` usan POST (payload en body, sin límite de tamaño)
+* **EXCEPCIÓN**: `guardarPedido` y `parsearImagen` usan POST (payload en body)
 * `respuestaOK()` envuelve en `{ ok: true, data: resultado }` → `apiGet()` desenvuelve automáticamente
 * Headers de Sheets son dinámicos → siempre usar `headers.indexOf()`, nunca índices fijos
 * `SHEET_ID` (no `SPREADSHEET_ID`) es la constante del backend
 * Archivos completos listos para pegar, nunca diffs parciales
+* Al entregar archivos: usar siempre el nombre exacto del archivo destino (sin sufijos _v1.6, _fix, etc.)
 
 ---
 
@@ -103,5 +130,5 @@
 * Paso a paso, confirmación explícita antes de avanzar
 * Archivos completos listos para pegar (nunca diffs)
 * Indicar claramente: qué va a GitHub vs qué va a Apps Script, y cuándo re-deploy
-* Preguntar todo lo necesario antes de escribir código
-* Al entregar archivos: usar siempre el nombre exacto del archivo destino (no sufijos como _v1.6, _fix, etc.)
+* Al entregar archivos: usar siempre el nombre exacto del archivo destino
+* Español en todas las interacciones
