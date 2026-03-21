@@ -2,6 +2,7 @@
  * Historial.jsx — Sprint C'
  * Lista todos los pedidos guardados ordenados por fecha desc.
  * ADMIN: botones editar ✏️ y eliminar 🗑️ por pedido.
+ * Fix: muestra pedidoId en la línea de fecha para identificación rápida.
  */
 import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -137,7 +138,6 @@ export default function Historial() {
 
       {/* Lista de pedidos */}
       {pedidos.map((p, idx) => {
-        // Nota: puede venir como Notas, notas o notasPedido
         const nota = p.Notas ?? p.notas ?? p.notasPedido ?? '';
         return (
           <div key={idx} className="bg-white border border-slate-200 rounded-xl overflow-hidden">
@@ -151,8 +151,9 @@ export default function Historial() {
                 <div className="font-medium text-sm text-slate-800 truncate">
                   {p.clienteNombre || p.clienteId || '—'}
                 </div>
+                {/* FIX: pedidoId visible para identificación rápida */}
                 <div className="text-xs text-slate-400 mt-0.5 flex items-center gap-2 flex-wrap">
-                  <span>{formatDatetime(p.fecha)} · {p.totalItems ?? 0} u.</span>
+                  <span>{p.pedidoId && <span className="font-medium text-slate-500">{p.pedidoId} · </span>}{formatDatetime(p.fecha)} · {p.totalItems ?? 0} u.</span>
                   <BadgePago estado={p.estadoPago} />
                   {p.editadoPor && (
                     <span className="text-xs text-orange-500 font-medium">✏️ editado</span>
@@ -168,7 +169,7 @@ export default function Historial() {
             {expandido === idx && (
               <div className="border-t border-slate-100 px-4 py-2 space-y-1">
 
-                {/* NUEVO: nota del pedido */}
+                {/* Nota del pedido */}
                 {nota && (
                   <div className="flex items-start gap-1.5 text-xs text-slate-500 bg-slate-50 rounded-lg px-3 py-2 mb-2">
                     <span>📝</span>
