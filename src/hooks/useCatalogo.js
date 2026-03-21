@@ -1,12 +1,16 @@
 /**
- * useCatalogo.js — Sprint E fix
+ * useCatalogo.js — Sprint E fix v2
  *
  * Filtrado de clientes por rol:
  *   ADMIN    → todos los clientes sin filtro
- *   VENDEDOR → solo clientes de su canal (c.canal === user.canal)
+ *   VENDEDOR → solo clientes donde CS_Clientes.vendedor === user.nombre
+ *
+ * CS_Clientes col D (vendedor) contiene el nombre exacto del vendedor
+ * tal como aparece en CS_Vendedores col B (nombre).
+ * Ejemplos: "German", "Pepe", "Valentina", "esteban.test"
  *
  * El backend obtenerCatalogo(null) devuelve todos los clientes.
- * El filtro se aplica client-side usando user.canal del AuthContext.
+ * El filtro se aplica client-side.
  *
  * Uso:
  *   const { clientes, productos, fraganciasPara, loading, error } = useCatalogo(user);
@@ -23,17 +27,17 @@ export function useCatalogo(user = null) {
 
   useEffect(() => {
     setLoading(true);
-    // Siempre pedimos sin filtro de canal → backend devuelve todos los clientes
+    // Sin filtro de canal → backend devuelve todos los clientes
     obtenerCatalogo(null)
       .then(data => {
         let lista = data.clientes ?? [];
 
-        // VENDEDOR: filtrar solo los clientes de su canal
-        // CS_Clientes col C = canal (ej: 'CHINOS', 'PEPE', 'DIRECTO')
-        // user.canal viene de CS_Vendedores col C (mismo valor)
-        if (user && user.rol !== 'ADMIN' && user.canal) {
+        // VENDEDOR: filtrar solo sus clientes
+        // CS_Clientes col D (vendedor) debe coincidir exactamente con user.nombre
+        if (user && user.rol !== 'ADMIN') {
+          const nombreVendedor = (user.nombre || '').toLowerCase().trim();
           lista = lista.filter(c =>
-            (c.canal || '').toUpperCase().trim() === user.canal.toUpperCase().trim()
+            (c.vendedor || '').toLowerCase().trim() === nombreVendedor
           );
         }
 
@@ -43,7 +47,7 @@ export function useCatalogo(user = null) {
       })
       .catch(e => setError(e?.message ?? 'Error al cargar catálogo'))
       .finally(() => setLoading(false));
-  }, [user?.rol, user?.canal]);
+  }, [user?.rol, user?.nombre]);
 
   const todasFragancias = [
     ...new Set(Object.values(fragancias).flat()),
