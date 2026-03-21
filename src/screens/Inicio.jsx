@@ -1,7 +1,9 @@
 /**
- * Inicio.jsx — Sprint E
+ * Inicio.jsx — Sprint E fix
  * Pantalla principal: resumen del día + estado del backend.
- * Accesos rápidos ADMIN: Consolidado Sheru, Finanzas, Historial
+ *
+ * Fix: VENDEDOR solo ve sus propios pedidos del día
+ * (filtra por p.Vendedor === user.nombre)
  */
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -10,13 +12,12 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { obtenerPedidos } from '../api/appsScript.js';
 import Loader from '../components/ui/Loader.jsx';
 
-// Convierte cualquier formato de fecha a "yyyy-mm-dd" en hora local
 function toLocalDateStr(val) {
   if (!val) return '';
   const d = new Date(val);
   if (isNaN(d)) return val.toString().substring(0, 10);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const y   = d.getFullYear();
+  const m   = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
 }
@@ -30,9 +31,9 @@ export default function Inicio() {
   const { user }  = useAuth();
   const esAdmin   = user?.rol === 'ADMIN';
   const navigate  = useNavigate();
-  const [pedidos, setPedidos]               = useState([]);
+  const [pedidos,        setPedidos]        = useState([]);
   const [loadingPedidos, setLoadingPedidos] = useState(true);
-  const [errorPedidos, setErrorPedidos]     = useState(null);
+  const [errorPedidos,   setErrorPedidos]   = useState(null);
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -52,7 +53,18 @@ export default function Inicio() {
     weekday: 'long', day: 'numeric', month: 'long',
   });
 
-  const pedidosHoy = pedidos.filter(p => toLocalDateStr(p.fecha) === hoyStr());
+  // Pedidos de hoy filtrados:
+  // ADMIN → todos
+  // VENDEDOR → solo los suyos (compara p.Vendedor con user.nombre)
+  const pedidosHoy = pedidos.filter(p => {
+    if (toLocalDateStr(p.fecha) !== hoyStr()) return false;
+    if (!esAdmin) {
+      const vendedorPedido = (p.Vendedor || p.vendedor || '').toString().toLowerCase().trim();
+      const nombreUser     = (user?.nombre || '').toLowerCase().trim();
+      if (vendedorPedido && nombreUser && vendedorPedido !== nombreUser) return false;
+    }
+    return true;
+  });
 
   return (
     <div className="p-4 space-y-4">
@@ -73,9 +85,9 @@ export default function Inicio() {
         </span>
       </div>
 
-      {/* Botón nuevo pedido */}
+      {/* Botón nuevo pedido — ADMIN usa parser, VENDEDOR usa formulario */}
       <button
-        onClick={() => navigate('/nuevo')}
+        onClick={() => navigate(esAdmin ? '/nuevo' : '/formulario')}
         className="w-full bg-brand-700 hover:bg-brand-800 active:bg-brand-900 text-white font-semibold py-4 rounded-2xl text-lg transition-colors shadow-md"
       >
         ➕ Nuevo Pedido
@@ -118,7 +130,6 @@ export default function Inicio() {
 
       {/* Accesos rápidos */}
       {esAdmin ? (
-        // ADMIN: 3 botones en grid 3 columnas
         <div className="grid grid-cols-3 gap-3">
           <button
             onClick={() => navigate('/consolidado')}
@@ -143,7 +154,6 @@ export default function Inicio() {
           </button>
         </div>
       ) : (
-        // VENDEDOR: solo Historial
         <div className="grid grid-cols-2 gap-3">
           <button
             onClick={() => navigate('/historial')}
