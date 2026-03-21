@@ -18,6 +18,7 @@
 * Sprint B: FormularioVendedor (entrada estructurada, 3 pasos)
 * Sprint B': Modelo ampliado (total_sheru, total_cliente, estado_pago, archivado)
 * Sprint C: Google OAuth + roles ADMIN/VENDEDOR
+* Sprint D: Consolidado Sheru con filtro de fechas
 
 ---
 
@@ -33,12 +34,12 @@
 * `src/App.jsx` — ProtectedRoute + rutas por rol
 * `src/components/layout/Header.jsx` — nombre/rol + botón signOut
 * `src/components/layout/BottomNav.jsx` — ítems filtrados por rol
-* `src/api/appsScript.js` — capa API, normaliza respuestas, `apiGet()` desenvuelve `json.data`
+* `src/api/appsScript.js` — v1.6: capa API, normaliza respuestas, `apiGet()` desenvuelve `json.data`, `guardarPedido` usa POST
 
 ---
 
 ## Archivos clave del backend (Apps Script)
-* `webapp_endpoint.gs` v2.1 — doGet + doPost, SHEET_ID, helpers `_cargarPrecios`, `_cargarMarkups`, `buscarCliente`, `guardarItems`, `respuestaOK`
+* `webapp_endpoint.gs` v2.4 — doGet + doPost, SHEET_ID, helpers `_cargarPrecios`, `_cargarMarkups`, `buscarCliente`, `guardarItems`, `respuestaOK`
 * `parser_pedidos_v2.gs` — Claude API parser texto
 * `mantenimiento.gs` — `cargarPreciosSheru`, alias management
 
@@ -48,10 +49,15 @@
 * `CS_Precios_Sheru`: col A=Producto_Parser, B=Nombre_Sheru, C=Precio, D=tiene_fragancia
 * `CS_Fragancias`: col A=Fragancia, B=Producto (fragancias como objeto `{ Producto: [frag1, frag2] }`)
 * `CS_Segmentos`: 2 filas header, datos desde fila 3, markup en col D
-* `CS_Pedidos`: headers dinámicos (usar `headers.indexOf()`), columnas clave: ID_Pedido, Fecha, Cliente_ID, Cliente_Nombre, Canal, Vendedor, Total_Unidades, Estado, Notas_Pedido, Items_JSON, total_sheru, total_cliente, estado_pago, archivado
-* `CS_Items`: ID_Pedido, Fragancia, Producto, Cantidad, Flag, Alias_Usado, Nota, precio_unit_sheru, precio_unit_cliente
-* `CS_Vendedores`: headers dinámicos, cols: vendedor_id, nombre, email, rol (ADMIN/VENDEDOR)
-* `CS_Clientes`: datos desde fila 3, col A=id, B=nombre, C=canal, D=vendedor
+* `CS_Pedidos`: headers dinámicos (usar `headers.indexOf()`), columnas en orden actual:
+  `Timestamp, Fecha, Canal, Vendedor, Cliente_ID, Cliente_Nombre, Total_Unidades, Estado,
+  Requiere_Revision, Items_JSON, Mensaje_Original, Notas, total_sheru, total_cliente,
+  estado_pago, fecha_pago, archivado, editado_por, fecha_edicion`
+  — ID del pedido → columna `Timestamp` (formato PED-XXXX)
+  — Notas → columna `Notas`
+* `CS_Items`: ID_Pedido, Fecha, Cliente_ID, Cliente_Nombre, Canal, Fragancia, Producto, Cantidad, Flag, Alias_Usado, Nota, precio_unit_sheru, precio_unit_cliente
+* `CS_Vendedores`: headers dinámicos, cols: vendedor_id, nombre, canal, email, rol (ADMIN/VENDEDOR)
+* `CS_Clientes`: datos desde fila 3, col A=id, B=nombre, C=canal, D=vendedor (nombre exacto coincide con CS_Vendedores.nombre)
 * `CS_Pedidos_Archivo`: pedidos eliminados/archivados
 
 ---
@@ -66,12 +72,13 @@
 | `/nuevo` (parser) | ✅ | ❌ → `/formulario` |
 | `/consolidado` | ✅ | ❌ → `/` |
 | `/editar/:pedidoId` | ✅ | ❌ |
+| `/finanzas` | ✅ | ❌ → `/` |
 
 ---
 
 ## Reglas técnicas inamovibles
 * CORS: todas las llamadas usan GET con `?datos=encodeURIComponent(JSON.stringify({accion,...}))`
-* POST solo para parser de imagen (no afectado por CORS en ese caso)
+* **EXCEPCIÓN**: `guardarPedido` y `parsearImagen` usan POST (payload en body, sin límite de tamaño)
 * `respuestaOK()` envuelve en `{ ok: true, data: resultado }` → `apiGet()` desenvuelve automáticamente
 * Headers de Sheets son dinámicos → siempre usar `headers.indexOf()`, nunca índices fijos
 * `SHEET_ID` (no `SPREADSHEET_ID`) es la constante del backend
@@ -97,3 +104,4 @@
 * Archivos completos listos para pegar (nunca diffs)
 * Indicar claramente: qué va a GitHub vs qué va a Apps Script, y cuándo re-deploy
 * Preguntar todo lo necesario antes de escribir código
+* Al entregar archivos: usar siempre el nombre exacto del archivo destino (no sufijos como _v1.6, _fix, etc.)
