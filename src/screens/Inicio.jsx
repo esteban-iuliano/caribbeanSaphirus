@@ -1,6 +1,7 @@
 /**
- * Inicio.jsx
+ * Inicio.jsx — Sprint E
  * Pantalla principal: resumen del día + estado del backend.
+ * Accesos rápidos ADMIN: Consolidado Sheru, Finanzas, Historial
  */
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -93,7 +94,6 @@ export default function Inicio() {
         ) : (
           <ul className="space-y-2">
             {pedidosHoy.map((p, i) => {
-              // Nota: puede venir como Notas, notas o notasPedido según normalización
               const nota = p.Notas ?? p.notas ?? p.notasPedido ?? '';
               return (
                 <li key={i} className="text-sm border-b border-slate-50 last:border-0 pb-2 last:pb-0">
@@ -103,7 +103,6 @@ export default function Inicio() {
                     </span>
                     <span className="text-slate-400">{p.totalItems} u.</span>
                   </div>
-                  {/* NUEVO: mostrar nota si existe */}
                   {nota && (
                     <div className="text-xs text-slate-500 mt-0.5 flex items-start gap-1">
                       <span>📝</span>
@@ -118,24 +117,43 @@ export default function Inicio() {
       </div>
 
       {/* Accesos rápidos */}
-      <div className="grid grid-cols-2 gap-3">
-        {esAdmin && (
+      {esAdmin ? (
+        // ADMIN: 3 botones en grid 3 columnas
+        <div className="grid grid-cols-3 gap-3">
           <button
             onClick={() => navigate('/consolidado')}
             className="bg-white border border-slate-200 rounded-xl p-4 text-center shadow-sm active:bg-slate-50"
           >
             <div className="text-2xl mb-1">📋</div>
-            <div className="text-xs font-medium text-slate-600">Consolidado Sheru</div>
+            <div className="text-xs font-medium text-slate-600">Consolidado</div>
           </button>
-        )}
-        <button
-          onClick={() => navigate('/historial')}
-          className="bg-white border border-slate-200 rounded-xl p-4 text-center shadow-sm active:bg-slate-50"
-        >
-          <div className="text-2xl mb-1">📂</div>
-          <div className="text-xs font-medium text-slate-600">Historial</div>
-        </button>
-      </div>
+          <button
+            onClick={() => navigate('/finanzas')}
+            className="bg-white border border-slate-200 rounded-xl p-4 text-center shadow-sm active:bg-slate-50"
+          >
+            <div className="text-2xl mb-1">💰</div>
+            <div className="text-xs font-medium text-slate-600">Finanzas</div>
+          </button>
+          <button
+            onClick={() => navigate('/historial')}
+            className="bg-white border border-slate-200 rounded-xl p-4 text-center shadow-sm active:bg-slate-50"
+          >
+            <div className="text-2xl mb-1">📂</div>
+            <div className="text-xs font-medium text-slate-600">Historial</div>
+          </button>
+        </div>
+      ) : (
+        // VENDEDOR: solo Historial
+        <div className="grid grid-cols-2 gap-3">
+          <button
+            onClick={() => navigate('/historial')}
+            className="bg-white border border-slate-200 rounded-xl p-4 text-center shadow-sm active:bg-slate-50"
+          >
+            <div className="text-2xl mb-1">📂</div>
+            <div className="text-xs font-medium text-slate-600">Historial</div>
+          </button>
+        </div>
+      )}
     </div>
   );
 }
