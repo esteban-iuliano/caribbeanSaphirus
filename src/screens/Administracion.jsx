@@ -290,9 +290,9 @@ function TabClientes() {
   const clientesFiltrados = clientes.filter(c => {
     const q = busqueda.toLowerCase();
     return (
-      c.nombre.toLowerCase().includes(q) ||
-      c.canal.toLowerCase().includes(q)  ||
-      c.vendedor.toLowerCase().includes(q)
+      (c.nombre   || '').toLowerCase().includes(q) ||
+      (c.canal    || '').toLowerCase().includes(q) ||
+      (c.vendedor || '').toLowerCase().includes(q)
     );
   });
 
