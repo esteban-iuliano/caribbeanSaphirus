@@ -21,12 +21,15 @@
 * Sprint C': Edición y eliminación de pedidos (solo ADMIN)
 * Sprint D: Consolidado Sheru con filtro de fechas
 * Sprint E: Módulo Finanzas (solo ADMIN) + fix filtro clientes/pedidos por rol
+* Sprint Admin: Pantalla /admin con CRUD completo de vendedores y clientes
 
 ---
 
 ## Roles y usuarios
 * `ADMIN`: esteban.admin (`esteban.iuliano@gmail.com`), ana.admin (`analuci.iuliano@gmail.com`)
 * `VENDEDOR`: German, Pepe, Valentina, Analia, Luky — cada uno con su mail en CS_Vendedores
+* Login valida Estado=ACTIVO en CS_Vendedores — usuarios INACTIVO no pueden entrar
+* Clientes con Estado=INACTIVO no aparecen en el selector del formulario
 
 ---
 
@@ -44,18 +47,19 @@
 ---
 
 ## Archivos clave del frontend
-* `src/context/AuthContext.jsx` — OAuth, sesión localStorage 24hs, user incluye canal
+* `src/context/AuthContext.jsx` — OAuth, sesión localStorage 24hs, user incluye canal. Fix: eliminado chequeo data.ok incorrecto, usa id_vendedor no vendedor_id
 * `src/screens/Login.jsx` — pantalla login con GoogleLogin
-* `src/App.jsx` — ProtectedRoute + rutas por rol (incluye /finanzas)
+* `src/App.jsx` — ProtectedRoute + rutas por rol (incluye /finanzas y /admin)
 * `src/components/layout/Header.jsx` — nombre/rol + botón signOut
 * `src/components/layout/BottomNav.jsx` — ítems filtrados por rol
-* `src/api/appsScript.js` — v1.6: capa API, normaliza respuestas, guardarPedido usa POST
+* `src/api/appsScript.js` — v1.7: capa API, normaliza respuestas, guardarPedido usa POST, incluye CRUD admin
 * `src/hooks/useCatalogo.js` — recibe user; ADMIN ve todos; VENDEDOR filtra por c.vendedor === user.nombre
+* `src/screens/Administracion.jsx` — v1.0: pantalla /admin con tabs Vendedores/Clientes, solo ADMIN
 
 ---
 
 ## Archivos clave del backend (Apps Script)
-* `webapp_endpoint.gs` v2.5 — doGet + doPost; verificarUsuario devuelve canal; obtenerFinanzas incluye vendedor en por_cliente
+* `webapp_endpoint.gs` v2.6 — doGet + doPost; verificarUsuario devuelve canal y valida Estado=ACTIVO; obtenerFinanzas incluye vendedor en por_cliente; CRUD admin completo
 * `parser_pedidos_v2.gs` — Claude API parser texto
 * `mantenimiento.gs` — cargarPreciosSheru, alias management
 
@@ -71,9 +75,16 @@
   estado_pago, fecha_pago, archivado, editado_por, fecha_edicion`
   — ID del pedido → columna `Timestamp` (formato PED-XXXX)
   — Notas → columna `Notas`
+  — Estado: `CONFIRMADO` (requerido por obtenerFinanzas)
 * `CS_Items`: ID_Pedido, Fecha, Cliente_ID, Cliente_Nombre, Canal, Fragancia, Producto, Cantidad, Flag, Alias_Usado, Nota, precio_unit_sheru, precio_unit_cliente
-* `CS_Vendedores`: col A=ID_Vendedor, B=Nombre, C=Canal, H=Email, I=Rol
-* `CS_Clientes`: datos desde fila 3, col A=id, B=nombre, C=canal, D=vendedor (nombre exacto coincide con CS_Vendedores.nombre)
+* `CS_Vendedores`: col A=ID_Vendedor, B=Nombre, C=Canal, D=Teléfono_WhatsApp, E=Forma_Cobro, F=Frecuencia_Entrega, G=Notas, H=Email, I=Rol, J=Estado (ACTIVO/INACTIVO)
+  — 1 sola fila de headers
+  — IDs formato VEN-XXX, auto-correlativos
+* `CS_Clientes`: 1 sola fila de headers (se eliminó fila título el 26/03/2026)
+  col A=ID_Cliente, B=Nombre_Cliente, C=Canal, D=Vendedor (NOMBRE, no ID), E=Dirección, F=Teléfono, G=Segmento_Precio, H=Estado, I=Notas, J=Frecuencia_Pedido
+  — IDs formato CLI-XXX, auto-correlativos
+  — Estado: Activo / ACTIVO — backend normaliza ambos con toUpperCase()
+  — Vendedor guarda el NOMBRE (ej: "German"), no el ID
 * `CS_Pedidos_Archivo`: pedidos eliminados por admin
 
 ---
@@ -89,6 +100,7 @@
 | `/consolidado` | ✅ | ❌ → `/` |
 | `/editar/:pedidoId` | ✅ | ❌ → `/` |
 | `/finanzas` | ✅ | ❌ → `/` |
+| `/admin` | ✅ | ❌ → `/` |
 
 ---
 
@@ -99,6 +111,27 @@
 | Clientes en Formulario | Todos | `c.vendedor === user.nombre` |
 | Pedidos en Historial | Todos + filtro dropdown | Solo los suyos |
 | Botón Nuevo Pedido (Inicio) | → `/nuevo` | → `/formulario` |
+| Accesos rápidos Inicio fila 1 | Consolidado · Finanzas · Historial | Historial |
+| Accesos rápidos Inicio fila 2 | Vendedores · Clientes | — |
+
+---
+
+## Pantalla Administración (/admin)
+* Solo ADMIN
+* Tab Vendedores: lista completa, crear, editar, activar/desactivar, eliminar
+* Tab Clientes: lista con buscador, crear, editar, activar/desactivar, eliminar
+* Eliminar vendedor → modal advertencia → elimina vendedor + todos sus clientes en cascada
+* Eliminar cliente → solo el cliente, pedidos históricos intactos
+* Acceso desde Inicio: botones 👤 Vendedores → `/admin?tab=vendedores` y 🏪 Clientes → `/admin?tab=clientes`
+
+---
+
+## Normalización en appsScript.js v1.7
+* `obtenerClientes()` → `{ datos: [...] }` — screens leen `data.datos`
+* `obtenerVendedores()` → `{ vendedores: [...] }` — Administracion.jsx lee `data.vendedores`
+* `obtenerPedidos()` → `{ datos: [...] }` — screens leen `res.datos`
+* Campos de cliente normalizados: `id, nombre, canal, vendedor, direccion, telefono, segmento_precio, estado, notas, frecuencia_pedido`
+* Campos de vendedor normalizados: `id, nombre, canal, telefono, forma_cobro, frecuencia_entrega, notas, email, rol, estado`
 
 ---
 
@@ -107,16 +140,20 @@
 * **EXCEPCIÓN**: `guardarPedido` y `parsearImagen` usan POST (payload en body)
 * `respuestaOK()` envuelve en `{ ok: true, data: resultado }` → `apiGet()` desenvuelve automáticamente
 * Headers de Sheets son dinámicos → siempre usar `headers.indexOf()`, nunca índices fijos
-* `SHEET_ID` (no `SPREADSHEET_ID`) es la constante del backend
+* `SHEET_ID` es la constante del backend (no `SPREADSHEET_ID`)
+* CS_Clientes tiene 1 fila de headers — backend lee desde `slice(1)`
+* CS_Segmentos tiene 2 filas de headers — `_cargarMarkups()` usa `slice(2)`
 * Archivos completos listos para pegar, nunca diffs parciales
-* Al entregar archivos: usar siempre el nombre exacto del archivo destino (sin sufijos _v1.6, _fix, etc.)
+* Al entregar archivos: usar siempre el nombre exacto del archivo destino
+* PWA cache: siempre probar fixes en incógnito o con Clear site data
+* GitHub Actions: build falla si hay imports de funciones inexistentes — verificar que appsScript.js tenga TODAS las funciones que importan los screens
 
 ---
 
 ## Canales y markups
 * CHINOS: vendor Germán, ~23 supermercados chinos, markup 1.095
 * PEPE: reseller con ~5 clientes, markup 1.11
-* DIRECTO: clientes individuales, markup variable
+* DIRECTO: clientes individuales, markup variable (Valentina 1.14x, Analia 1.196x, Luky 1.2x, 120_UNIDADES 1.196x)
 
 ---
 
