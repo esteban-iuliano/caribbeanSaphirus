@@ -1,8 +1,10 @@
 /**
- * AuthContext.jsx — Sprint E fix
+ * AuthContext.jsx — Sprint E fix + Admin fix
  *
- * Cambio: user ahora incluye campo `canal` (leído desde CS_Vendedores)
- * Esto permite que useCatalogo filtre clientes por canal del vendedor.
+ * Fix v2.5: eliminado chequeo `data.ok` incorrecto.
+ *   El backend devuelve { ok: true, data: { id_vendedor, nombre, rol, canal, estado } }
+ *   envelope.ok cubre el caso de error — no existe data.ok en la respuesta.
+ *   Corregido además: data.vendedor_id → data.id_vendedor
  *
  * Interfaz pública:
  *   user  → { email, nombre, rol, vendedor_id, canal } | null
@@ -76,17 +78,20 @@ export function AuthProvider({ children }) {
     const res      = await fetch(`${API_URL}?datos=${params}`);
     const envelope = await res.json();
 
-    if (!envelope.ok) throw new Error(envelope.error || 'Error de conexión con el backend');
-    const data = envelope.data;
-    if (!data.ok) throw new Error(data.error || 'Email no autorizado en CaribbeanSaphirus');
+    // envelope.ok = false → error del backend (usuario no encontrado, inactivo, etc.)
+    if (!envelope.ok) {
+      throw new Error(envelope.error || 'Email no autorizado en CaribbeanSaphirus');
+    }
 
-    // Incluye canal — agregado Sprint E fix
+    // envelope.data = { id_vendedor, nombre, email, rol, canal, estado }
+    const data = envelope.data;
+
     const newUser = {
       email:       payload.email,
       nombre:      data.nombre      || payload.name || payload.email,
-      rol:         data.rol,
-      vendedor_id: data.vendedor_id,
-      canal:       data.canal || '',
+      rol:         data.rol         || 'VENDEDOR',
+      vendedor_id: data.id_vendedor || '',   // corregido: era data.vendedor_id
+      canal:       data.canal       || '',
     };
 
     saveSession(newUser);
