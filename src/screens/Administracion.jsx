@@ -255,7 +255,7 @@ function TabClientes() {
     try {
       // Sin filtro de canal → trae todos (admin ve todo)
       const data = await obtenerClientes();
-      setClientes(data.clientes || []);
+      setClientes(data.datos || []);
     } catch (e) {
       setError('Error al cargar clientes: ' + e.message);
     } finally {
