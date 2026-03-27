@@ -1,5 +1,5 @@
 /**
- * App.jsx — Sprint E
+ * App.jsx — Sprint E + Admin
  *
  * ProtectedRoute maneja 3 casos:
  *   1. loading        → spinner (evita flash de redirect)
@@ -20,6 +20,7 @@ import FormularioVendedor from './screens/FormularioVendedor.jsx';
 import Login from './screens/Login.jsx';
 import EditarPedido from './screens/EditarPedido.jsx';
 import Finanzas from './screens/Finanzas.jsx';
+import Administracion from './screens/Administracion.jsx';
 
 // ─── ProtectedRoute ───────────────────────────────────────────────────────────
 
@@ -117,6 +118,12 @@ export default function App() {
           <Route path="/finanzas" element={
             <ProtectedRoute requiredRole="ADMIN" fallback="/">
               <Finanzas />
+            </ProtectedRoute>
+          } />
+
+          <Route path="/admin" element={
+            <ProtectedRoute requiredRole="ADMIN" fallback="/">
+              <Administracion />
             </ProtectedRoute>
           } />
 

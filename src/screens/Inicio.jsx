@@ -1,9 +1,12 @@
 /**
- * Inicio.jsx — Sprint E fix
+ * Inicio.jsx — Sprint E fix + Admin shortcuts
  * Pantalla principal: resumen del día + estado del backend.
  *
  * Fix: VENDEDOR solo ve sus propios pedidos del día
  * (filtra por p.Vendedor === user.nombre)
+ *
+ * Admin shortcuts fila 2: Vendedores → /admin?tab=vendedores
+ *                          Clientes  → /admin?tab=clientes
  */
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -128,32 +131,56 @@ export default function Inicio() {
         )}
       </div>
 
-      {/* Accesos rápidos */}
-      {esAdmin ? (
-        <div className="grid grid-cols-3 gap-3">
-          <button
-            onClick={() => navigate('/consolidado')}
-            className="bg-white border border-slate-200 rounded-xl p-4 text-center shadow-sm active:bg-slate-50"
-          >
-            <div className="text-2xl mb-1">📋</div>
-            <div className="text-xs font-medium text-slate-600">Consolidado</div>
-          </button>
-          <button
-            onClick={() => navigate('/finanzas')}
-            className="bg-white border border-slate-200 rounded-xl p-4 text-center shadow-sm active:bg-slate-50"
-          >
-            <div className="text-2xl mb-1">💰</div>
-            <div className="text-xs font-medium text-slate-600">Finanzas</div>
-          </button>
-          <button
-            onClick={() => navigate('/historial')}
-            className="bg-white border border-slate-200 rounded-xl p-4 text-center shadow-sm active:bg-slate-50"
-          >
-            <div className="text-2xl mb-1">📂</div>
-            <div className="text-xs font-medium text-slate-600">Historial</div>
-          </button>
-        </div>
-      ) : (
+      {/* ── Accesos rápidos ADMIN ── */}
+      {esAdmin && (
+        <>
+          {/* Fila 1: Consolidado · Finanzas · Historial */}
+          <div className="grid grid-cols-3 gap-3">
+            <button
+              onClick={() => navigate('/consolidado')}
+              className="bg-white border border-slate-200 rounded-xl p-4 text-center shadow-sm active:bg-slate-50"
+            >
+              <div className="text-2xl mb-1">📋</div>
+              <div className="text-xs font-medium text-slate-600">Consolidado</div>
+            </button>
+            <button
+              onClick={() => navigate('/finanzas')}
+              className="bg-white border border-slate-200 rounded-xl p-4 text-center shadow-sm active:bg-slate-50"
+            >
+              <div className="text-2xl mb-1">💰</div>
+              <div className="text-xs font-medium text-slate-600">Finanzas</div>
+            </button>
+            <button
+              onClick={() => navigate('/historial')}
+              className="bg-white border border-slate-200 rounded-xl p-4 text-center shadow-sm active:bg-slate-50"
+            >
+              <div className="text-2xl mb-1">📂</div>
+              <div className="text-xs font-medium text-slate-600">Historial</div>
+            </button>
+          </div>
+
+          {/* Fila 2: Vendedores · Clientes */}
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              onClick={() => navigate('/admin?tab=vendedores')}
+              className="bg-white border border-slate-200 rounded-xl p-4 text-center shadow-sm active:bg-slate-50"
+            >
+              <div className="text-2xl mb-1">👤</div>
+              <div className="text-xs font-medium text-slate-600">Vendedores</div>
+            </button>
+            <button
+              onClick={() => navigate('/admin?tab=clientes')}
+              className="bg-white border border-slate-200 rounded-xl p-4 text-center shadow-sm active:bg-slate-50"
+            >
+              <div className="text-2xl mb-1">🏪</div>
+              <div className="text-xs font-medium text-slate-600">Clientes</div>
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* ── Accesos rápidos VENDEDOR ── */}
+      {!esAdmin && (
         <div className="grid grid-cols-2 gap-3">
           <button
             onClick={() => navigate('/historial')}
