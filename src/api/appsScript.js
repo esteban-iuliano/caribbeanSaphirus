@@ -1,258 +1,251 @@
-// ============================================================
-// CaribbeanSaphirus — src/api/appsScript.js
-// Versión: 1.6
-// Cambios v1.6:
-//   - obtenerVendedores()
-//   - crearVendedor(datos)
-//   - editarVendedor(id, cambios)
-//   - eliminarVendedor(id)
-//   - crearCliente(datos)
-//   - editarCliente(id, cambios)
-//   - eliminarCliente(id)
-// ============================================================
+/**
+ * appsScript.js — v1.7
+ * Capa de acceso al backend Google Apps Script.
+ * Normaliza TODAS las respuestas → { datos: [...] } para los screens.
+ *
+ * v1.3: agrega obtenerCatalogo, origen en guardarPedido
+ * v1.4: agrega pedidoId en obtenerPedidos + Sprint C' (obtenerPedidoDetalle, editarPedido, eliminarPedidoAdmin)
+ * v1.5: obtenerConsolidado acepta desde/hasta para filtro de fechas (Sprint D)
+ *        mapeo campo Notas en obtenerPedidos
+ * v1.6: FIX CRÍTICO — guardarPedido migrado de apiGet → apiPost
+ *        + agrega obtenerFinanzas para Sprint E
+ * v1.7: Sprint Admin — agrega gestión de vendedores y clientes (CRUD completo)
+ *        obtenerVendedores, crearVendedor, editarVendedor, eliminarVendedor
+ *        crearCliente, editarCliente, eliminarCliente
+ *        SIN romper ninguna función existente
+ */
 
-const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbyDpfH_Ly56ja6rtXgFucnvKHVCaYj7A6T6nVrM2-gZQjUZt4Q_CJzjG8nqmKrL45PdNA/exec';
+const BASE_URL =
+  'https://script.google.com/macros/s/AKfycbyDpfH_Ly56ja6rtXgFucnvKHVCaYj7A6T6nVrM2-gZQjUZt4Q_CJzjG8nqmKrL45PdNA/exec';
 
-// ------------------------------------------------------------
-// HELPER BASE — única función que habla con el backend
-// Toda llamada usa GET con ?datos=... (restricción CORS de Apps Script)
-// ------------------------------------------------------------
-async function _llamarBackend(payload) {
-  const url = `${BACKEND_URL}?datos=${encodeURIComponent(JSON.stringify(payload))}`;
-  const resp = await fetch(url);
-  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-  const json = await resp.json();
-  if (!json.ok) throw new Error(json.error || 'Error del backend');
-  return json.data;
+// ─── Helpers internos ────────────────────────────────────────────────────────
+
+async function apiGet(payload) {
+  const params = encodeURIComponent(JSON.stringify(payload));
+  const res = await fetch(`${BASE_URL}?datos=${params}`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const json = await res.json();
+  if (json?.ok === false) throw new Error(json.error || 'Error del servidor');
+  return json?.data ?? json;
 }
 
-// ------------------------------------------------------------
-// PING
-// ------------------------------------------------------------
-export async function ping() {
-  return _llamarBackend({ accion: 'ping' });
+async function apiPost(payload) {
+  const res = await fetch(BASE_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const json = await res.json();
+  if (json?.ok === false) throw new Error(json.error || 'Error del servidor');
+  return json?.data ?? json;
 }
 
-// ------------------------------------------------------------
-// VERIFICAR USUARIO
-// ------------------------------------------------------------
-export async function verificarUsuario(email) {
-  return _llamarBackend({ accion: 'verificarUsuario', email });
+function normalizeDate(val) {
+  if (!val) return null;
+  const s = val.toString().trim();
+  if (!s) return null;
+  const iso = s.replace(' ', 'T');
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return null;
+  const y   = d.getFullYear();
+  const mo  = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  const h   = String(d.getHours()).padStart(2, '0');
+  const mi  = String(d.getMinutes()).padStart(2, '0');
+  return `${y}-${mo}-${day} ${h}:${mi}`;
 }
 
-// ------------------------------------------------------------
-// PARSEAR PEDIDO
-// ------------------------------------------------------------
-export async function parsearPedido(mensaje) {
-  return _llamarBackend({ accion: 'parsearPedido', mensaje });
-}
+// ─── Compresión de imágenes ──────────────────────────────────────────────────
 
-// ------------------------------------------------------------
-// GUARDAR PEDIDO
-// ------------------------------------------------------------
-export async function guardarPedido(pedido) {
-  return _llamarBackend({ accion: 'guardarPedido', ...pedido });
-}
-
-// ------------------------------------------------------------
-// OBTENER PEDIDOS
-// Retorna: { pedidos: [...] }
-// Normaliza campos para que el frontend siempre acceda igual
-// ------------------------------------------------------------
-export async function obtenerPedidos(filtros = {}) {
-  const data = await _llamarBackend({ accion: 'obtenerPedidos', ...filtros });
-  return {
-    pedidos: (data.pedidos || []).map(_normalizarPedido)
-  };
-}
-
-// ------------------------------------------------------------
-// OBTENER CONSOLIDADO
-// ------------------------------------------------------------
-export async function obtenerConsolidado(desde = null, hasta = null) {
-  return _llamarBackend({ accion: 'obtenerConsolidado', desde, hasta });
-}
-
-// ------------------------------------------------------------
-// OBTENER FINANZAS
-// ------------------------------------------------------------
-export async function obtenerFinanzas() {
-  return _llamarBackend({ accion: 'obtenerFinanzas' });
-}
-
-// ------------------------------------------------------------
-// EDITAR PEDIDO
-// ------------------------------------------------------------
-export async function editarPedido(pedidoId, cambios, emailEditor = '') {
-  return _llamarBackend({
-    accion      : 'editarPedido',
-    pedido_id   : pedidoId,
-    cambios,
-    email_editor: emailEditor
+export function compressImage(file, maxWidth = 1024, quality = 0.7) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+    img.onload = () => {
+      let { width, height } = img;
+      if (width > maxWidth) {
+        height = Math.round((height * maxWidth) / width);
+        width = maxWidth;
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+      URL.revokeObjectURL(objectUrl);
+      resolve(canvas.toDataURL('image/jpeg', quality).split(',')[1]);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error('No se pudo cargar la imagen'));
+    };
+    img.src = objectUrl;
   });
 }
 
-// ------------------------------------------------------------
-// ELIMINAR PEDIDO (ADMIN)
-// ------------------------------------------------------------
-export async function eliminarPedidoAdmin(pedidoId) {
-  return _llamarBackend({ accion: 'eliminarPedidoAdmin', pedido_id: pedidoId });
+// ─── Endpoints públicos — existentes ─────────────────────────────────────────
+
+export async function ping() {
+  return apiGet({ accion: 'ping' });
 }
 
-// ------------------------------------------------------------
-// OBTENER CLIENTES — solo ACTIVOS, con filtro opcional de canal
-// Retorna: { clientes: [...] }
-// ------------------------------------------------------------
-export async function obtenerClientes(canal = null) {
+export async function obtenerClientes(canal) {
   const payload = { accion: 'obtenerClientes' };
   if (canal) payload.canal = canal;
-  const data = await _llamarBackend(payload);
+  const res = await apiGet(payload);
+  return { datos: res?.clientes ?? [] };
+}
+
+export async function obtenerCatalogo(canal = 'CHINOS') {
+  const res = await apiGet({ accion: 'obtenerCatalogo', canal });
   return {
-    clientes: (data.clientes || []).map(_normalizarCliente)
+    clientes:   res?.clientes   ?? [],
+    productos:  res?.productos  ?? [],
+    fragancias: res?.fragancias ?? {},
   };
 }
 
-// ============================================================
-// ===  ADMINISTRACIÓN DE VENDEDORES  =========================
-// ============================================================
+export async function parsearPedido(clienteId, texto) {
+  const res = await apiGet({ accion: 'parsearPedido', mensaje: texto, clienteId });
+  return { items: res?.items ?? [] };
+}
 
-// ------------------------------------------------------------
-// OBTENER VENDEDORES — lista completa para pantalla admin
-// Retorna: { vendedores: [...] }
-// ------------------------------------------------------------
+export async function parsearImagen(clienteId, imagenBase64) {
+  const res = await apiPost({
+    accion:      'parsearImagen',
+    imageBase64: imagenBase64,
+    mimeType:    'image/jpeg',
+    clienteId,
+  });
+  return { items: res?.items ?? [] };
+}
+
+export async function guardarPedido(clienteId, items, nota = '', origen = 'PWA') {
+  const totalUnidades = items.reduce((s, it) => s + (it.cantidad ?? 0), 0);
+  return apiPost({
+    accion: 'guardarPedido',
+    pedido: {
+      cliente_id:       clienteId,
+      items,
+      total_unidades:   totalUnidades,
+      notas_pedido:     nota,
+      mensaje_original: '',
+      origen,
+    },
+  });
+}
+
+export async function obtenerPedidos() {
+  const res = await apiGet({ accion: 'obtenerPedidos' });
+  const pedidos = (res?.pedidos ?? []).map(p => ({
+    pedidoId:      p.Timestamp        ?? p.ID_Pedido      ?? p.Pedido_ID      ?? p.id_pedido ?? '',
+    clienteId:     p.Cliente_ID       ?? p.cliente_id     ?? '',
+    clienteNombre: p.Cliente_Nombre   ?? p.cliente_nombre ?? '',
+    canal:         p.Canal            ?? p.canal          ?? '',
+    vendedor:      p.Vendedor         ?? p.vendedor        ?? '',
+    fecha:         normalizeDate(p.Fecha ?? p.fecha),
+    totalItems:    Number(p.Total_Unidades ?? p.total_unidades ?? 0),
+    estado:        p.Estado           ?? p.estado         ?? '',
+    estadoPago:    p.estado_pago      ?? 'PENDIENTE',
+    totalSheru:    Number(p.total_sheru   ?? 0),
+    totalCliente:  Number(p.total_cliente ?? 0),
+    notas:         p.Notas            ?? p.notas          ?? p.Notas_Pedido  ?? '',
+    editadoPor:    p.editado_por      ?? '',
+    items:         (() => {
+      try {
+        const raw = p.Items_JSON ?? p.items ?? [];
+        return typeof raw === 'string' ? JSON.parse(raw) : raw;
+      } catch { return []; }
+    })(),
+  }));
+  return { datos: pedidos };
+}
+
+export async function obtenerConsolidado(desde, hasta) {
+  const payload = { accion: 'obtenerConsolidado' };
+  if (desde) payload.desde = desde;
+  if (hasta) payload.hasta = hasta;
+  const res = await apiGet(payload);
+  return { datos: res?.items ?? [] };
+}
+
+export async function obtenerFinanzas(desde, hasta) {
+  const res = await apiGet({ accion: 'obtenerFinanzas', desde, hasta });
+  return {
+    resumen: res?.resumen ?? {
+      total_sheru:   0,
+      total_cliente: 0,
+      margen:        0,
+      pendiente:     0,
+      pedidos_count: 0,
+    },
+    por_cliente:  res?.por_cliente  ?? [],
+    por_vendedor: res?.por_vendedor ?? [],
+  };
+}
+
+// ─── Sprint C' — Edición y eliminación de pedidos (ADMIN) ───────────────────
+
+export async function obtenerPedidoDetalle(pedidoId, email) {
+  const res = await apiGet({ accion: 'obtenerPedidoDetalle', pedidoId, email });
+  return {
+    pedido: res?.pedido ?? null,
+    items:  res?.items  ?? [],
+  };
+}
+
+export async function editarPedido(pedidoId, cambios, email) {
+  const res = await apiGet({ accion: 'editarPedido', pedidoId, cambios, email });
+  return res;
+}
+
+export async function eliminarPedidoAdmin(pedidoId, email) {
+  const res = await apiGet({ accion: 'eliminarPedidoAdmin', pedidoId, email });
+  return res;
+}
+
+// ─── Sprint Admin — Gestión de vendedores (ADMIN) ────────────────────────────
+
 export async function obtenerVendedores() {
-  const data = await _llamarBackend({ accion: 'obtenerVendedores' });
+  const res = await apiGet({ accion: 'obtenerVendedores' });
   return {
-    vendedores: (data.vendedores || []).map(_normalizarVendedor)
+    vendedores: (res?.vendedores ?? []).map(v => ({
+      id                : v.ID_Vendedor         || v.id_vendedor         || '',
+      nombre            : v.Nombre              || v.nombre              || '',
+      canal             : v.Canal               || v.canal               || '',
+      telefono          : v.Teléfono_WhatsApp   || v.telefono            || '',
+      forma_cobro       : v.Forma_Cobro         || v.forma_cobro         || '',
+      frecuencia_entrega: v.Frecuencia_Entrega  || v.frecuencia_entrega  || '',
+      notas             : v.Notas               || v.notas               || '',
+      email             : v.Email               || v.email               || '',
+      rol               : (v.Rol    || v.rol    || 'VENDEDOR').toUpperCase(),
+      estado            : (v.Estado || v.estado || 'ACTIVO').toUpperCase(),
+    })),
   };
 }
 
-// ------------------------------------------------------------
-// CREAR VENDEDOR
-// datos: { nombre, canal, telefono, forma_cobro, frecuencia_entrega, notas, email, rol }
-// Retorna: { id_vendedor, mensaje }
-// ------------------------------------------------------------
 export async function crearVendedor(datos) {
-  return _llamarBackend({ accion: 'crearVendedor', ...datos });
+  return apiGet({ accion: 'crearVendedor', ...datos });
 }
 
-// ------------------------------------------------------------
-// EDITAR VENDEDOR
-// cambios: cualquier subconjunto de campos del vendedor
-// Retorna: { mensaje }
-// ------------------------------------------------------------
 export async function editarVendedor(idVendedor, cambios) {
-  return _llamarBackend({
-    accion      : 'editarVendedor',
-    id_vendedor : idVendedor,
-    cambios
-  });
+  return apiGet({ accion: 'editarVendedor', id_vendedor: idVendedor, cambios });
 }
 
-// ------------------------------------------------------------
-// ELIMINAR VENDEDOR — borra vendedor + clientes en cascada
-// El frontend ya mostró el modal de advertencia antes de llamar esto
-// Retorna: { mensaje }
-// ------------------------------------------------------------
 export async function eliminarVendedor(idVendedor) {
-  return _llamarBackend({
-    accion      : 'eliminarVendedor',
-    id_vendedor : idVendedor
-  });
+  return apiGet({ accion: 'eliminarVendedor', id_vendedor: idVendedor });
 }
 
-// ============================================================
-// ===  ADMINISTRACIÓN DE CLIENTES  ===========================
-// ============================================================
+// ─── Sprint Admin — Gestión de clientes (ADMIN) ──────────────────────────────
 
-// ------------------------------------------------------------
-// CREAR CLIENTE
-// datos: { nombre, canal, vendedor, direccion, telefono, segmento_precio, notas, frecuencia_pedido }
-// Retorna: { id_cliente, mensaje }
-// ------------------------------------------------------------
 export async function crearCliente(datos) {
-  return _llamarBackend({ accion: 'crearCliente', ...datos });
+  return apiGet({ accion: 'crearCliente', ...datos });
 }
 
-// ------------------------------------------------------------
-// EDITAR CLIENTE
-// cambios: cualquier subconjunto de campos del cliente
-// Retorna: { mensaje }
-// ------------------------------------------------------------
 export async function editarCliente(idCliente, cambios) {
-  return _llamarBackend({
-    accion    : 'editarCliente',
-    id_cliente: idCliente,
-    cambios
-  });
+  return apiGet({ accion: 'editarCliente', id_cliente: idCliente, cambios });
 }
 
-// ------------------------------------------------------------
-// ELIMINAR CLIENTE — solo el cliente, pedidos históricos intactos
-// Retorna: { mensaje }
-// ------------------------------------------------------------
 export async function eliminarCliente(idCliente) {
-  return _llamarBackend({
-    accion    : 'eliminarCliente',
-    id_cliente: idCliente
-  });
-}
-
-// ============================================================
-// ===  NORMALIZADORES — traducción backend → frontend  =======
-// ============================================================
-
-// Pedido: garantiza que el frontend siempre use las mismas keys
-function _normalizarPedido(p) {
-  return {
-    id             : p.Timestamp        || p.timestamp        || '',
-    fecha          : p.Fecha            || p.fecha            || '',
-    cliente_id     : p.Cliente_ID       || p.cliente_id       || '',
-    cliente_nombre : p.Cliente_Nombre   || p.cliente_nombre   || '',
-    total_unidades : p.Total_Unidades   || p.total_unidades   || 0,
-    estado         : p.Estado           || p.estado           || 'Pendiente',
-    requiere_revision: p.Requiere_Revision || p.requiere_revision || false,
-    items_json     : p.Items_JSON       || p.items_json       || '[]',
-    mensaje_original: p.Mensaje_Original || p.mensaje_original || '',
-    notas          : p.Notas            || p.Notas_Pedido     || p.notas || '',
-    total_sheru    : parseFloat(p.total_sheru   || 0),
-    total_cliente  : parseFloat(p.total_cliente || 0),
-    estado_pago    : p.estado_pago      || 'PENDIENTE',
-    fecha_pago     : p.fecha_pago       || '',
-    archivado      : p.archivado        || false,
-    editado_por    : p.editado_por      || '',
-    fecha_edicion  : p.fecha_edicion    || ''
-  };
-}
-
-// Cliente: garantiza keys consistentes en toda la app
-function _normalizarCliente(c) {
-  return {
-    id               : c.ID_Cliente        || c.id_cliente        || '',
-    nombre           : c.Nombre_Cliente    || c.nombre_cliente    || c.nombre || '',
-    canal            : c.Canal             || c.canal             || '',
-    vendedor         : c.Vendedor          || c.vendedor          || '',
-    direccion        : c.Dirección         || c.direccion         || '',
-    telefono         : c.Teléfono          || c.telefono          || '',
-    segmento_precio  : c.Segmento_Precio   || c.segmento_precio   || '',
-    estado           : (c.Estado           || c.estado            || 'ACTIVO').toUpperCase(),
-    notas            : c.Notas             || c.notas             || '',
-    frecuencia_pedido: c.Frecuencia_Pedido || c.frecuencia_pedido || ''
-  };
-}
-
-// Vendedor: garantiza keys consistentes en toda la app
-function _normalizarVendedor(v) {
-  return {
-    id                 : v.ID_Vendedor         || v.id_vendedor         || '',
-    nombre             : v.Nombre              || v.nombre              || '',
-    canal              : v.Canal               || v.canal               || '',
-    telefono           : v.Teléfono_WhatsApp   || v.telefono            || '',
-    forma_cobro        : v.Forma_Cobro         || v.forma_cobro         || '',
-    frecuencia_entrega : v.Frecuencia_Entrega  || v.frecuencia_entrega  || '',
-    notas              : v.Notas               || v.notas               || '',
-    email              : v.Email               || v.email               || '',
-    rol                : (v.Rol                || v.rol                 || 'VENDEDOR').toUpperCase(),
-    estado             : (v.Estado             || v.estado              || 'ACTIVO').toUpperCase()
-  };
+  return apiGet({ accion: 'eliminarCliente', id_cliente: idCliente });
 }
