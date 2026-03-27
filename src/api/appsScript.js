@@ -93,7 +93,20 @@ export async function obtenerClientes(canal) {
   const payload = { accion: 'obtenerClientes' };
   if (canal) payload.canal = canal;
   const res = await apiGet(payload);
-  return { datos: res?.clientes ?? [] };
+  return {
+    datos: (res?.clientes ?? []).map(c => ({
+      id              : c.ID_Cliente         || c.id_cliente         || '',
+      nombre          : c.Nombre_Cliente     || c.nombre_cliente     || c.nombre    || '',
+      canal           : c.Canal              || c.canal              || '',
+      vendedor        : c.Vendedor           || c.vendedor           || '',
+      direccion       : c.Direccion          || c.direccion          || '',
+      telefono        : c.Telefono           || c.telefono           || '',
+      segmento_precio : c.Segmento_Precio    || c.segmento_precio    || '',
+      estado          : (c.Estado || c.estado || 'ACTIVO').toUpperCase(),
+      notas           : c.Notas              || c.notas              || '',
+      frecuencia_pedido: c.Frecuencia_Pedido || c.frecuencia_pedido  || '',
+    }))
+  };
 }
 
 export async function obtenerCatalogo(canal = 'CHINOS') {
